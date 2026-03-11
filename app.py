@@ -32,10 +32,10 @@ for key, default in [
     ("user_logged_in", False),
     ("username", ""),
     ("is_admin", False),
-    ("creating_plan", False),
+    ("wizard_step", 0),
     ("new_plan_name", ""),
     ("num_days", 1),
-    ("new_plan_days", []),
+    ("day_names", []),
     ("exercises_dict", {}),
     ("sets_dict", {}),
     ("current_plan", None)
@@ -70,7 +70,6 @@ if mode=="Registrieren":
 
 # Login
 if st.sidebar.button("Anmelden"):
-    # Admin Login
     if username_input=="admin" and password_input=="adminpasswort":
         st.session_state.is_admin = True
         st.session_state.user_logged_in = True
@@ -98,43 +97,58 @@ if st.session_state.is_admin:
     st.stop()
 
 # ----------------------
-# Trainingsplan erstellen / auswählen
+# Willkommen User
 # ----------------------
 st.header(f"Willkommen {st.session_state.username}")
 
-if st.session_state.current_plan is None and not st.session_state.creating_plan:
+# ----------------------
+# Trainingsplan auswählen oder neuen erstellen
+# ----------------------
+if st.session_state.current_plan is None and st.session_state.wizard_step==0:
     options = list(plans_df[plans_df["User"]==st.session_state.username]["Planname"].unique())
     options.append("Neuen Plan erstellen")
     choice = st.selectbox("Trainingsplan auswählen oder erstellen", options)
     if choice=="Neuen Plan erstellen":
-        st.session_state.creating_plan = True
+        st.session_state.wizard_step = 1  # Schritt 1: Planname
     else:
         st.session_state.current_plan = choice
 
 # ----------------------
-# Wizard: Neuer Trainingsplan
+# Wizard Schritt 1: Planname & Anzahl Tage
 # ----------------------
-if st.session_state.creating_plan:
-    st.subheader("📝 Trainingsplan erstellen")
-
-    # Planname
+if st.session_state.wizard_step==1:
+    st.subheader("📝 Neuer Trainingsplan")
     st.session_state.new_plan_name = st.text_input("Name des Trainingsplans", st.session_state.new_plan_name)
     st.session_state.num_days = st.number_input("Anzahl Trainingstage", min_value=1, max_value=7, value=st.session_state.num_days, step=1)
+    if st.button("Weiter"):
+        st.session_state.day_names = [""]*st.session_state.num_days
+        st.session_state.wizard_step = 2
+        st.experimental_rerun()
 
-    # Trainingstage benennen
+# ----------------------
+# Wizard Schritt 2: Trainingstage benennen
+# ----------------------
+if st.session_state.wizard_step==2:
+    st.subheader("🗓 Trainingstage benennen")
     for i in range(st.session_state.num_days):
-        day_name = st.text_input(f"Name Trainingstag {i+1}", key=f"day_{i}")
-        if len(st.session_state.new_plan_days)<st.session_state.num_days:
-            st.session_state.new_plan_days.append(day_name)
+        st.session_state.day_names[i] = st.text_input(f"Name Trainingstag {i+1}", value=st.session_state.day_names[i], key=f"dayname_{i}")
+    if st.button("Weiter"):
+        st.session_state.exercises_dict = {day:"" for day in st.session_state.day_names}
+        st.session_state.sets_dict = {day:"" for day in st.session_state.day_names}
+        st.session_state.wizard_step = 3
+        st.experimental_rerun()
 
-    # Übungen + Sätze
-    for day in st.session_state.new_plan_days:
-        st.subheader(day)
+# ----------------------
+# Wizard Schritt 3: Übungen + Sätze
+# ----------------------
+if st.session_state.wizard_step==3:
+    st.subheader("💪 Übungen & Sätze eintragen")
+    for day in st.session_state.day_names:
+        st.markdown(f"### {day}")
         st.session_state.exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)", st.session_state.exercises_dict.get(day,""))
         st.session_state.sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt, Zahl pro Übung)", st.session_state.sets_dict.get(day,""))
-
     if st.button("Trainingsplan speichern"):
-        for day in st.session_state.new_plan_days:
+        for day in st.session_state.day_names:
             plans_df = pd.concat([plans_df, pd.DataFrame([{
                 "User": st.session_state.username,
                 "Planname": st.session_state.new_plan_name,
@@ -143,11 +157,11 @@ if st.session_state.creating_plan:
                 "Sätze": st.session_state.sets_dict[day]
             }])], ignore_index=True)
         plans_df.to_csv(PLANS_FILE, index=False)
-        st.session_state.creating_plan = False
         st.session_state.current_plan = st.session_state.new_plan_name
+        st.session_state.wizard_step = 0
         st.session_state.new_plan_name = ""
         st.session_state.num_days = 1
-        st.session_state.new_plan_days = []
+        st.session_state.day_names = []
         st.session_state.exercises_dict = {}
         st.session_state.sets_dict = {}
         st.experimental_rerun()
@@ -155,18 +169,23 @@ if st.session_state.creating_plan:
 # ----------------------
 # Trainingsplan trainieren
 # ----------------------
-if st.session_state.current_plan:
+if st.session_state.current_plan and st.session_state.wizard_step==0:
     plan = st.session_state.current_plan
     plan_days = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan)]
     day_choice = st.selectbox("Welchen Trainingstag trainieren?", plan_days["Trainingstag"].tolist())
 
     day_row = plan_days[plan_days["Trainingstag"]==day_choice].iloc[0]
-    exercises = [ex.strip() for ex in day_row["Übungen"].split(",") if ex.strip()]
-    sets_list = []
-    if day_row["Sätze"]:
-        sets_list = [int(s.strip()) if s.strip().isdigit() else 2 for s in day_row["Sätze"].split(",")]
-    if len(sets_list)<len(exercises):
-        sets_list += [2]*(len(exercises)-len(sets_list))
+
+    if pd.isna(day_row["Übungen"]) or day_row["Übungen"].strip()=="":
+        st.warning("Für diesen Trainingstag wurden noch keine Übungen eingetragen!")
+        exercises = []
+        sets_list = []
+    else:
+        exercises = [ex.strip() for ex in day_row["Übungen"].split(",") if ex.strip()]
+        if day_row["Sätze"]:
+            sets_list = [int(s.strip()) if s.strip().isdigit() else 2 for s in day_row["Sätze"].split(",")]
+        if len(sets_list)<len(exercises):
+            sets_list += [2]*(len(exercises)-len(sets_list))
 
     st.header(f"Training: {day_choice}")
     completed_data=[]

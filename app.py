@@ -26,6 +26,8 @@ def load_csv(file_path, columns):
         df = pd.read_csv(file_path)
     else:
         df = pd.DataFrame(columns=columns)
+        df.to_csv(file_path, index=False)  # Datei sofort anlegen
+    # fehlende Spalten ergänzen
     for col in columns:
         if col not in df.columns:
             df[col] = ""
@@ -42,6 +44,7 @@ if "user_logged_in" not in st.session_state:
     st.session_state.user_logged_in = False
     st.session_state.is_admin = False
     st.session_state.username = ""
+    st.session_state.current_plan = None
 
 # ------------------------------
 # Sidebar: Login oder Registrierung
@@ -91,11 +94,11 @@ if not st.session_state.user_logged_in:
     st.stop()
 
 # ------------------------------
-# Trainingsplan auswählen / erstellen
+# STARTFENSTER: Trainingsplan auswählen oder erstellen
 # ------------------------------
+st.header("🏋️ Trainingsplan auswählen oder erstellen")
 if st.session_state.is_admin:
-    st.sidebar.info("Admin-Modus: Zugriff auf alle Benutzerpläne")
-    user_filter = st.sidebar.selectbox("Filter Benutzer (Admin)", options=["Alle"] + users_df["User"].tolist())
+    user_filter = st.selectbox("Benutzer (Admin)", options=["Alle"] + users_df["User"].tolist())
 else:
     user_filter = st.session_state.username
 
@@ -105,21 +108,18 @@ if st.session_state.is_admin and user_filter != "Alle":
 elif not st.session_state.is_admin:
     plans_user_df = plans_df[plans_df["User"] == st.session_state.username]
 else:
-    plans_user_df = plans_df  # Admin & Alle
+    plans_user_df = plans_df
 
-plans = plans_user_df["Planname"].unique().tolist()
-plans.append("Neuer Plan")
+plans_list = plans_user_df["Planname"].unique().tolist()
+plans_list.append("Neuer Plan")
 
-st.sidebar.header("Trainingsplan auswählen / erstellen")
-selected_plan = st.sidebar.selectbox("Wähle einen Trainingsplan", plans)
+selected_plan = st.selectbox("Wähle einen Trainingsplan", plans_list)
 
-# ------------------------------
-# Neuen Plan erstellen
-# ------------------------------
+# Neuer Plan erstellen
 if selected_plan == "Neuer Plan" and not st.session_state.is_admin:
-    new_plan_name = st.sidebar.text_input("Name des neuen Trainingsplans")
-    num_days = st.sidebar.slider("Wie viele Trainingstage soll der Plan haben?", 1, 7, 3)
-    create_plan = st.sidebar.button("Plan erstellen")
+    new_plan_name = st.text_input("Name des neuen Trainingsplans")
+    num_days = st.slider("Wie viele Trainingstage soll der Plan haben?", 1, 7, 3)
+    create_plan = st.button("Plan erstellen")
     if create_plan and new_plan_name:
         for i in range(1, num_days + 1):
             plans_df = pd.concat([plans_df, pd.DataFrame([{
@@ -131,12 +131,17 @@ if selected_plan == "Neuer Plan" and not st.session_state.is_admin:
             }])], ignore_index=True)
         plans_df.to_csv(plans_file, index=False)
         st.success(f"Trainingsplan '{new_plan_name}' erstellt!")
-        selected_plan = new_plan_name
+        st.session_state.current_plan = new_plan_name
+
+# Wenn bereits existierender Plan ausgewählt
+if selected_plan != "Neuer Plan":
+    st.session_state.current_plan = selected_plan
 
 # ------------------------------
 # Trainingsplan bearbeiten / Training durchführen
 # ------------------------------
-if selected_plan != "Neuer Plan":
+if st.session_state.current_plan:
+    selected_plan = st.session_state.current_plan
     plan_days = plans_df[plans_df["Planname"] == selected_plan]
     if not st.session_state.is_admin:
         plan_days = plan_days[plan_days["User"] == st.session_state.username]
@@ -197,13 +202,13 @@ if selected_plan != "Neuer Plan":
             today = datetime.today().strftime("%Y-%m-%d %H:%M")
             df_new = pd.DataFrame(completed_data)
             df_new["Datum"] = today
-            df = pd.concat([history_df, df_new], ignore_index=True)
-            df.to_csv(history_file, index=False)
+            history_df = pd.concat([history_df, df_new], ignore_index=True)
+            history_df.to_csv(history_file, index=False)
             st.success(f"Training für {selected_day} gespeichert! 📈")
             st.balloons()
     
     st.header("📊 Trainingshistorie")
-    df_hist = pd.read_csv(history_file)
+    df_hist = load_csv(history_file, ["User", "Plan", "Trainingstag", "Übung", "Satz", "Gewicht", "Wiederholungen", "Datum"])
     if not st.session_state.is_admin:
         df_hist_user = df_hist[df_hist["User"] == st.session_state.username]
     elif st.session_state.is_admin and user_filter != "Alle":
@@ -212,11 +217,6 @@ if selected_plan != "Neuer Plan":
         df_hist_user = df_hist
     st.dataframe(df_hist_user)
     
-    st.subheader("Fortschritte pro Übung")
-    for ex in exercises:
-        df_ex = df_hist_user[df_hist_user["Übung"] == ex]
-        if not df_ex.empty:
-            st.line_chart(df_ex[["Gewicht", "Wiederholungen"]])
     st.subheader("Fortschritte pro Übung")
     for ex in exercises:
         df_ex = df_hist_user[df_hist_user["Übung"] == ex]

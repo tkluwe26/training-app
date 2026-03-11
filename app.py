@@ -2,37 +2,14 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_cookies_manager import EncryptedCookieManager
 
-
-# ----------------------------
-# CONFIG
-# ----------------------------
-
-st.set_page_config(
-    page_title="FitTrack",
-    page_icon="💪",
-    layout="wide"
-)
+st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 
 st.title("💪 FitTrack")
 
 
 # ----------------------------
-# COOKIE LOGIN
-# ----------------------------
-
-cookies = EncryptedCookieManager(
-    prefix="fittrack_",
-    password="super_secret_password"
-)
-
-if not cookies.ready():
-    st.stop()
-
-
-# ----------------------------
-# FILES
+# Dateien
 # ----------------------------
 
 USERS_FILE = "users.csv"
@@ -50,16 +27,8 @@ def load_csv(file, columns):
     return df
 
 
-users_df = load_csv(
-    USERS_FILE,
-    ["user", "password"]
-)
-
-plans_df = load_csv(
-    PLANS_FILE,
-    ["user", "plan", "day", "exercise", "sets"]
-)
-
+users_df = load_csv(USERS_FILE, ["user", "password"])
+plans_df = load_csv(PLANS_FILE, ["user", "plan", "day", "exercise", "sets"])
 history_df = load_csv(
     HISTORY_FILE,
     ["user","plan","day","exercise","set","weight","reps","rir","date"]
@@ -67,7 +36,7 @@ history_df = load_csv(
 
 
 # ----------------------------
-# SESSION STATE
+# Session State
 # ----------------------------
 
 if "logged_in" not in st.session_state:
@@ -78,18 +47,7 @@ if "username" not in st.session_state:
 
 
 # ----------------------------
-# AUTO LOGIN
-# ----------------------------
-
-if not st.session_state.logged_in:
-
-    if "username" in cookies:
-        st.session_state.logged_in = True
-        st.session_state.username = cookies["username"]
-
-
-# ----------------------------
-# LOGOUT
+# Logout
 # ----------------------------
 
 def logout():
@@ -97,96 +55,151 @@ def logout():
     st.session_state.logged_in = False
     st.session_state.username = None
 
-    if "username" in cookies:
-        del cookies["username"]
-        cookies.save()
-
     st.rerun()
 
 
 # ----------------------------
-# LOGIN SCREEN
+# Login / Register
 # ----------------------------
 
 def login_screen():
 
-    st.sidebar.header("Login")
+    st.subheader("Login")
 
-    username = st.sidebar.text_input("Username")
-    password = st.sidebar.text_input("Password", type="password")
+    tab1, tab2 = st.tabs(["Login", "Register"])
 
-    mode = st.sidebar.radio("Mode", ["Login","Register"])
+    with tab1:
 
-    if st.sidebar.button("Submit"):
+        user = st.text_input("Username")
+        pw = st.text_input("Password", type="password")
 
-        if mode == "Register":
-
-            if username in users_df.user.values:
-                st.sidebar.error("User exists")
-
-            else:
-
-                users_df.loc[len(users_df)] = [
-                    username,
-                    password
-                ]
-
-                users_df.to_csv(USERS_FILE,index=False)
-
-                st.sidebar.success("Account created")
-
-        else:
+        if st.button("Login"):
 
             row = users_df[
-                (users_df.user == username) &
-                (users_df.password == password)
+                (users_df.user == user) &
+                (users_df.password == pw)
             ]
 
             if not row.empty:
 
                 st.session_state.logged_in = True
-                st.session_state.username = username
-
-                cookies["username"] = username
-                cookies.save()
+                st.session_state.username = user
 
                 st.rerun()
 
             else:
+                st.error("Wrong login")
 
-                st.sidebar.error("Wrong login")
+    with tab2:
+
+        new_user = st.text_input("New username")
+        new_pw = st.text_input("New password", type="password")
+
+        if st.button("Register"):
+
+            if new_user in users_df.user.values:
+                st.error("Username exists")
+
+            else:
+
+                users_df.loc[len(users_df)] = [new_user, new_pw]
+                users_df.to_csv(USERS_FILE, index=False)
+
+                st.success("Account created")
 
 
 # ----------------------------
-# CREATE PLAN
+# Admin Panel
+# ----------------------------
+
+def admin_panel():
+
+    st.subheader("Admin Panel")
+
+    st.write(users_df)
+
+    for user in users_df.user:
+
+        if user == "admin":
+            continue
+
+        if st.button(f"Delete {user}"):
+
+            users_df.drop(
+                users_df[users_df.user == user].index,
+                inplace=True
+            )
+
+            users_df.to_csv(USERS_FILE, index=False)
+
+            st.rerun()
+
+
+# ----------------------------
+# Plan erstellen
 # ----------------------------
 
 def create_plan():
 
-    st.subheader("Create new plan")
+    st.subheader("Create plan")
 
-    plan = st.text_input("Plan name")
-    day = st.text_input("Training day")
-    exercise = st.text_input("Exercise")
-    sets = st.number_input("Sets",1,10,3)
+    plan_name = st.text_input("Plan name")
 
-    if st.button("Add exercise"):
+    num_days = st.number_input("Training days",1,7,3)
 
-        plans_df.loc[len(plans_df)] = [
-            st.session_state.username,
-            plan,
-            day,
-            exercise,
-            sets
-        ]
+    exercises_data = []
 
-        plans_df.to_csv(PLANS_FILE,index=False)
+    for d in range(num_days):
 
-        st.success("Exercise added")
+        st.markdown(f"### Day {d+1}")
+
+        day_name = st.text_input(
+            "Day name",
+            key=f"dayname{d}"
+        )
+
+        num_ex = st.number_input(
+            "Exercises",
+            1,10,3,
+            key=f"exnum{d}"
+        )
+
+        for e in range(num_ex):
+
+            ex = st.text_input(
+                "Exercise",
+                key=f"ex{d}{e}"
+            )
+
+            sets = st.number_input(
+                "Sets",
+                1,10,3,
+                key=f"sets{d}{e}"
+            )
+
+            exercises_data.append(
+                [day_name, ex, sets]
+            )
+
+    if st.button("Save plan"):
+
+        for row in exercises_data:
+
+            plans_df.loc[len(plans_df)] = [
+                st.session_state.username,
+                plan_name,
+                row[0],
+                row[1],
+                row[2]
+            ]
+
+        plans_df.to_csv(PLANS_FILE, index=False)
+
+        st.success("Plan saved")
 
 
 # ----------------------------
-# PLAN LIST
+# Planliste
 # ----------------------------
 
 def show_plans():
@@ -197,33 +210,73 @@ def show_plans():
         plans_df.user == user
     ].plan.unique()
 
-    st.subheader("Your plans")
+    st.subheader("Your Plans")
 
     if len(user_plans) == 0:
         st.info("No plans yet")
+        return None
 
-    for plan in user_plans:
+    plan = st.selectbox("Select plan", user_plans)
 
-        col1,col2 = st.columns([4,1])
+    col1,col2 = st.columns(2)
 
-        col1.write(plan)
+    if col1.button("Delete plan"):
 
-        if col2.button("Delete",key=plan):
+        plans_df.drop(
+            plans_df[plans_df.plan == plan].index,
+            inplace=True
+        )
 
-            plans_df.drop(
-                plans_df[plans_df.plan == plan].index,
-                inplace=True
-            )
+        plans_df.to_csv(PLANS_FILE, index=False)
 
-            plans_df.to_csv(PLANS_FILE,index=False)
+        st.rerun()
 
-            st.rerun()
+    if col2.button("Edit plan"):
 
-    return user_plans
+        edit_plan(plan)
+
+    return plan
 
 
 # ----------------------------
-# TRAINING
+# Plan bearbeiten
+# ----------------------------
+
+def edit_plan(plan):
+
+    st.subheader("Edit plan")
+
+    plan_rows = plans_df[
+        plans_df.plan == plan
+    ]
+
+    for i,row in plan_rows.iterrows():
+
+        ex = st.text_input(
+            "Exercise",
+            value=row.exercise,
+            key=f"edit_ex{i}"
+        )
+
+        sets = st.number_input(
+            "Sets",
+            1,10,
+            value=int(row.sets),
+            key=f"edit_sets{i}"
+        )
+
+        plans_df.at[i,"exercise"] = ex
+        plans_df.at[i,"sets"] = sets
+
+    if st.button("Save changes"):
+
+        plans_df.to_csv(PLANS_FILE,index=False)
+
+        st.success("Plan updated")
+
+
+# ----------------------------
+# Training
 # ----------------------------
 
 def training(plan):
@@ -237,19 +290,17 @@ def training(plan):
 
     days = plan_rows.day.unique()
 
-    day = st.selectbox("Training day",days)
+    day = st.selectbox("Training day", days)
 
     exercises = plan_rows[
         plan_rows.day == day
     ]
 
-    st.header(day)
-
     results = []
 
     for _,row in exercises.iterrows():
 
-        st.subheader(row.exercise)
+        st.markdown(f"### {row.exercise}")
 
         for s in range(int(row.sets)):
 
@@ -269,8 +320,7 @@ def training(plan):
 
             rir = c4.number_input(
                 "RIR",
-                0,
-                10,
+                0,10,
                 key=f"{row.exercise}{s}rir"
             )
 
@@ -292,35 +342,46 @@ def training(plan):
 
         df = pd.DataFrame(
             results,
-            columns = history_df.columns
+            columns=history_df.columns
         )
 
-        new_history = pd.concat([history_df,df])
+        new_hist = pd.concat([history_df,df])
 
-        new_history.to_csv(HISTORY_FILE,index=False)
+        new_hist.to_csv(HISTORY_FILE,index=False)
 
         st.success("Workout saved")
 
 
 # ----------------------------
-# HISTORY
+# Historie
 # ----------------------------
 
-def show_history():
+def show_history(plan):
 
     user = st.session_state.username
 
-    st.subheader("History")
-
     hist = history_df[
-        history_df.user == user
+        (history_df.user == user) &
+        (history_df.plan == plan)
     ]
 
-    st.dataframe(hist)
+    if hist.empty:
+        return
+
+    st.subheader("Training History")
+
+    day = st.selectbox(
+        "History day",
+        hist.day.unique()
+    )
+
+    st.dataframe(
+        hist[hist.day == day]
+    )
 
 
 # ----------------------------
-# MAIN APP
+# APP FLOW
 # ----------------------------
 
 if not st.session_state.logged_in:
@@ -328,22 +389,24 @@ if not st.session_state.logged_in:
     login_screen()
     st.stop()
 
+
+st.sidebar.write(f"Logged in as **{st.session_state.username}**")
 st.sidebar.button("Logout", on_click=logout)
 
-st.header(f"Welcome {st.session_state.username}")
 
-plans = show_plans()
+if st.session_state.username == "admin":
 
-options = list(plans) + ["Create new plan"]
+    admin_panel()
 
-choice = st.selectbox("Select plan", options)
+st.divider()
 
-if choice == "Create new plan":
-
+if st.button("Create new plan"):
     create_plan()
 
-else:
+plan = show_plans()
 
-    training(choice)
+if plan:
 
-show_history()
+    training(plan)
+
+    show_history(plan)

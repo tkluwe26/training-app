@@ -19,10 +19,20 @@ HISTORY_FILE = "history.csv"
 def load_csv(file, columns):
     if os.path.exists(file):
         df = pd.read_csv(file)
+        # Prüfen, ob alle Spalten existieren
+        for col in columns:
+            if col not in df.columns:
+                df[col] = ""
+        df = df[columns]  # Spaltenreihenfolge erzwingen
     else:
         df = pd.DataFrame(columns=columns)
         df.to_csv(file, index=False)
     return df
+
+# CSVs laden
+users_df = load_csv(USERS_FILE, ["User","Password"])
+plans_df = load_csv(PLANS_FILE, ["User","Planname","Trainingstag","Übungen","Sätze"])
+history_df = load_csv(HISTORY_FILE, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","Datum"])
 
 users_df = load_csv(USERS_FILE, ["User","Password"])
 plans_df = load_csv(PLANS_FILE, ["User","Planname","Trainingstag","Übungen","Sätze"])

@@ -113,7 +113,12 @@ if not st.session_state.creating_plan and st.session_state.current_plan is None:
             st.session_state.creating_plan = True
             st.session_state.new_plan_days = []
     else:
-        st.session_state.current_plan = selected_plan
+        # Erst prüfen, ob der Plan tatsächlich Trainingstage/Übungen hat
+        plan_rows = plans_user_df[plans_user_df["Planname"]==selected_plan]
+        if not plan_rows.empty:
+            st.session_state.current_plan = selected_plan
+        else:
+            st.warning("Dieser Plan hat noch keine Trainingstage. Bitte erst Plan erstellen.")
 
 # ------------------------------
 # Neuer Plan Wizard
@@ -166,50 +171,57 @@ if st.session_state.current_plan:
     elif st.session_state.is_admin and user_filter!="Alle":
         plan_days = plan_days[plan_days["User"]==user_filter]
     
-    plan_days_list = plan_days["Trainingstag"].tolist()
-    selected_day = st.selectbox("Welchen Trainingstag trainieren?", plan_days_list)
-    
-    day_row = plans_df[(plans_df["Planname"]==selected_plan) & (plans_df["Trainingstag"]==selected_day)].iloc[0]
-    exercises = [ex.strip() for ex in day_row["Übungen"].split(",") if ex.strip()]
-    sets_list = []
-    if day_row["Sätze"]:
-        sets_list = [int(s.strip()) if s.strip().isdigit() else 2 for s in day_row["Sätze"].split(",")]
-    if len(sets_list)<len(exercises):
-        sets_list += [2]*(len(exercises)-len(sets_list))
+    if plan_days.empty:
+        st.info("Dieser Plan hat noch keine Trainingstage. Bitte erst Übungen eintragen.")
+    else:
+        plan_days_list = plan_days["Trainingstag"].tolist()
+        selected_day = st.selectbox("Welchen Trainingstag trainieren?", plan_days_list)
 
-    st.header(f"Training: {selected_day}")
-    completed_data=[]
-    for idx, ex in enumerate(exercises):
-        num_sets = sets_list[idx]
-        st.subheader(ex)
-        for i in range(num_sets):
-            cols = st.columns(3)
-            cols[0].write(f"Satz {i+1}")
-            weight = cols[1].number_input("Gewicht (kg)", min_value=0.0, step=0.5, key=f"{selected_plan}_{selected_day}_{ex}_{i}_weight")
-            reps = cols[2].number_input("Wiederholungen", min_value=0, step=1, key=f"{selected_plan}_{selected_day}_{ex}_{i}_reps")
-            if weight>0 and reps>0:
-                completed_data.append({
-                    "User": st.session_state.username,
-                    "Plan": selected_plan,
-                    "Trainingstag": selected_day,
-                    "Übung": ex,
-                    "Satz": i+1,
-                    "Gewicht": weight,
-                    "Wiederholungen": reps
-                })
-    if st.button("Training speichern ✅"):
-        if completed_data:
-            today = datetime.today().strftime("%Y-%m-%d %H:%M")
-            df_new = pd.DataFrame(completed_data)
-            df_new["Datum"]=today
-            history_df = pd.concat([history_df,df_new],ignore_index=True)
-            history_df.to_csv(history_file,index=False)
-            st.success("Training gespeichert!")
-            st.balloons()
+        day_row = plan_days[plan_days["Trainingstag"]==selected_day]
+        if day_row.empty:
+            st.warning("Für diesen Trainingstag sind noch keine Übungen eingetragen.")
         else:
-            st.warning("Bitte mindestens einen Satz mit Gewicht & Wiederholungen eintragen")
+            day_row = day_row.iloc[0]
+            exercises = [ex.strip() for ex in day_row["Übungen"].split(",") if ex.strip()]
+            sets_list = []
+            if day_row["Sätze"]:
+                sets_list = [int(s.strip()) if s.strip().isdigit() else 2 for s in day_row["Sätze"].split(",")]
+            if len(sets_list)<len(exercises):
+                sets_list += [2]*(len(exercises)-len(sets_list))
 
-    st.header("📊 Trainingshistorie")
-    df_hist = load_csv(history_file, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","Datum"])
-    df_hist_user = df_hist[df_hist["User"]==st.session_state.username] if not st.session_state.is_admin else df_hist
-    st.dataframe(df_hist_user)
+            st.header(f"Training: {selected_day}")
+            completed_data=[]
+            for idx, ex in enumerate(exercises):
+                num_sets = sets_list[idx]
+                st.subheader(ex)
+                for i in range(num_sets):
+                    cols = st.columns(3)
+                    cols[0].write(f"Satz {i+1}")
+                    weight = cols[1].number_input("Gewicht (kg)", min_value=0.0, step=0.5, key=f"{selected_plan}_{selected_day}_{ex}_{i}_weight")
+                    reps = cols[2].number_input("Wiederholungen", min_value=0, step=1, key=f"{selected_plan}_{selected_day}_{ex}_{i}_reps")
+                    if weight>0 and reps>0:
+                        completed_data.append({
+                            "User": st.session_state.username,
+                            "Plan": selected_plan,
+                            "Trainingstag": selected_day,
+                            "Übung": ex,
+                            "Satz": i+1,
+                            "Gewicht": weight,
+                            "Wiederholungen": reps
+                        })
+            if st.button("Training speichern ✅"):
+                if completed_data:
+                    today = datetime.today().strftime("%Y-%m-%d %H:%M")
+                    df_new = pd.DataFrame(completed_data)
+                    df_new["Datum"]=today
+                    history_df = pd.concat([history_df,df_new],ignore_index=True)
+                    history_df.to_csv(history_file,index=False)
+                    st.success("Training gespeichert!")
+                    st.balloons()
+                else:
+                    st.warning("Bitte mindestens einen Satz mit Gewicht & Wiederholungen eintragen")
+
+            st.header("📊 Trainingshistorie")
+            df_hist = load_csv(history_file, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","Datum"])
+            df_hist_user = df_hist[df_hist["User"]==st.session_state.username] if not st.session_state.is_admin else df_hist
+            st.dataframe(df_hist_user)

@@ -67,20 +67,18 @@ if not st.session_state.user_logged_in:
     password_input = st.sidebar.text_input("Passwort", type="password")
 
     # Registrierung
-    if mode=="Registrieren":
-        if st.sidebar.button("Registrieren"):
-            if username_input.strip()=="" or password_input.strip()=="":
-                st.sidebar.error("Bitte Benutzername & Passwort ausfüllen")
-            elif username_input in users_df["User"].values:
-                st.sidebar.error("Benutzername existiert bereits")
-            else:
-                users_df = pd.concat([users_df, pd.DataFrame([{
-                    "User": username_input,
-                    "Password": password_input
-                }])], ignore_index=True)
-                users_df.to_csv(USERS_FILE,index=False)
-                st.sidebar.success("Registrierung erfolgreich! Bitte anmelden")
-                st.stop()
+    if mode=="Registrieren" and st.sidebar.button("Registrieren"):
+        if username_input.strip()=="" or password_input.strip()=="":
+            st.sidebar.error("Bitte Benutzername & Passwort ausfüllen")
+        elif username_input in users_df["User"].values:
+            st.sidebar.error("Benutzername existiert bereits")
+        else:
+            users_df = pd.concat([users_df, pd.DataFrame([{
+                "User": username_input,
+                "Password": password_input
+            }])], ignore_index=True)
+            users_df.to_csv(USERS_FILE,index=False)
+            st.sidebar.success("Registrierung erfolgreich! Bitte anmelden")
 
     # Login
     if st.sidebar.button("Anmelden"):
@@ -98,6 +96,7 @@ if not st.session_state.user_logged_in:
                 st.sidebar.success(f"Willkommen {username_input}")
             else:
                 st.sidebar.error("Benutzername oder Passwort falsch")
+    # Kein st.stop() mehr – App läuft weiter
     st.stop()
 
 # ----------------------
@@ -137,7 +136,7 @@ if st.session_state.is_admin:
 st.header(f"Willkommen {st.session_state.username}")
 
 # ----------------------
-# Trainingsplan auswählen oder erstellen + löschen + bearbeiten
+# Trainingsplan auswählen oder erstellen
 # ----------------------
 st.subheader("Trainingsplan auswählen oder erstellen")
 user_plans = list(plans_df[plans_df["User"]==st.session_state.username]["Planname"].unique())
@@ -169,27 +168,12 @@ else:
     choice = "Neuen Plan erstellen"
 
 # ----------------------
-# Hilfsfunktion: One-Rep-Max nach Tabelle
-# ----------------------
-def estimate_1rm(weight, reps):
-    if reps < 1:
-        return weight
-    if reps > 20:
-        reps = 20
-    percentage_lookup = {
-        1: 100, 2: 97, 3: 94, 4: 92, 5: 89, 6: 86, 7: 83, 8: 81, 9: 78, 10: 75,
-        11: 73, 12: 71, 13: 70, 14: 68, 15: 67, 16: 65, 17: 64, 18: 63, 19: 61, 20: 60
-    }
-    return weight / (percentage_lookup[reps]/100)
-
-# ----------------------
 # Plan erstellen oder bearbeiten
 # ----------------------
 if choice=="Neuen Plan erstellen" or st.session_state.edit_plan:
     if st.session_state.edit_plan:
         plan_name = st.session_state.edit_plan
         plan_days_df = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan_name)]
-
         if plan_days_df.empty:
             st.warning("Dieser Plan existiert nicht mehr!")
             st.session_state.edit_plan = None
@@ -238,7 +222,6 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
     plan = st.session_state.current_plan
     plan_days = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan)]
     day_choice = st.selectbox("Welchen Trainingstag trainieren?", plan_days["Trainingstag"].tolist())
-
     day_row = plan_days[plan_days["Trainingstag"]==day_choice].iloc[0]
 
     if pd.isna(day_row["Übungen"]) or day_row["Übungen"].strip()=="":
@@ -258,29 +241,23 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
     for idx, ex in enumerate(exercises):
         num_sets = sets_list[idx]
         st.subheader(ex)
-
-        # Letztes Training (beste Leistung)
-        last_hist = history_df[
-            (history_df["User"]==st.session_state.username) &
-            (history_df["Plan"]==plan) &
-            (history_df["Trainingstag"]==day_choice) &
-            (history_df["Übung"]==ex)
-        ]
+        last_hist = history_df[(history_df["User"]==st.session_state.username) &
+                               (history_df["Plan"]==plan) &
+                               (history_df["Trainingstag"]==day_choice) &
+                               (history_df["Übung"]==ex)]
+        # Maximalperformance bestimmen
+        max_perf = None
         if not last_hist.empty:
-            last_session = last_hist.copy()
-            last_session["1RM"] = last_session.apply(lambda row: estimate_1rm(row["Gewicht"], row["Wiederholungen"]), axis=1)
-            best_set = last_session.loc[last_session["1RM"].idxmax()]
-            st.info(
-                f"Letztes Training (beste Leistung): {best_set['Gewicht']} kg x {best_set['Wiederholungen']} Wiederholungen, "
-                f"RIR {best_set.get('RIR','-')}"
-            )
+            last_hist["OneRM"] = last_hist.apply(lambda row: row["Gewicht"]*(1+(row["Wiederholungen"]-1)*0.033), axis=1)
+            best_row = last_hist.loc[last_hist["OneRM"].idxmax()]
+            st.info(f"Letztes Training (max Leistung): Gewicht {best_row['Gewicht']} kg, Wiederholungen {best_row['Wiederholungen']}, RIR {best_row.get('RIR','?')}")
 
         for i in range(num_sets):
-            cols = st.columns(4)
+            cols = st.columns(3)
             cols[0].write(f"Satz {i+1}")
             weight = cols[1].number_input("Gewicht (kg)", min_value=0.0, step=0.5, key=f"{plan}_{day_choice}_{ex}_{i}_weight")
             reps = cols[2].number_input("Wiederholungen", min_value=0, step=1, key=f"{plan}_{day_choice}_{ex}_{i}_reps")
-            rir = cols[3].number_input("RIR", min_value=0, step=1, key=f"{plan}_{day_choice}_{ex}_{i}_rir")
+            rir = cols[2].number_input("RIR", min_value=0, step=1, key=f"{plan}_{day_choice}_{ex}_{i}_rir")
             if weight>0 and reps>0:
                 completed_data.append({
                     "User": st.session_state.username,

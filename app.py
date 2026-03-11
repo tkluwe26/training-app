@@ -3,8 +3,8 @@ import pandas as pd
 from datetime import datetime
 import os
 
-st.set_page_config(page_title="Trainings-App", layout="wide")
-st.title("🏋️ Trainings-App")
+st.set_page_config(page_title="Trainings-App von Till", layout="wide")
+st.title("Progress - Training by Till")
 
 # ----------------------
 # Dateien

@@ -100,6 +100,27 @@ if not st.session_state.user_logged_in:
     st.stop()
 
 # ----------------------
+# Passwort ändern
+# ----------------------
+if st.session_state.user_logged_in and not st.session_state.is_admin:
+    with st.sidebar.expander("🔑 Passwort ändern"):
+        old_password = st.text_input("Altes Passwort", type="password", key="old_pw")
+        new_password = st.text_input("Neues Passwort", type="password", key="new_pw")
+        new_password_confirm = st.text_input("Neues Passwort bestätigen", type="password", key="new_pw_confirm")
+        if st.button("Passwort aktualisieren"):
+            row = users_df[(users_df["User"]==st.session_state.username) & (users_df["Password"]==old_password)]
+            if row.empty:
+                st.sidebar.error("Altes Passwort ist falsch!")
+            elif new_password.strip() == "":
+                st.sidebar.error("Neues Passwort darf nicht leer sein!")
+            elif new_password != new_password_confirm:
+                st.sidebar.error("Neue Passwörter stimmen nicht überein!")
+            else:
+                users_df.loc[users_df["User"]==st.session_state.username, "Password"] = new_password
+                users_df.to_csv(USERS_FILE, index=False)
+                st.sidebar.success("Passwort erfolgreich geändert!")
+
+# ----------------------
 # Admin Ansicht
 # ----------------------
 if st.session_state.is_admin:

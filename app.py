@@ -28,7 +28,6 @@ def load_csv(file, columns):
         df.to_csv(file, index=False)
     return df
 
-# CSVs laden
 users_df = load_csv(USERS_FILE, ["User","Password"])
 plans_df = load_csv(PLANS_FILE, ["User","Planname","Trainingstag","Übungen","Sätze"])
 history_df = load_csv(HISTORY_FILE, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","RIR","Datum"])
@@ -67,6 +66,7 @@ if not st.session_state.user_logged_in:
     username_input = st.sidebar.text_input("Benutzername")
     password_input = st.sidebar.text_input("Passwort", type="password")
 
+    # Registrierung
     if mode=="Registrieren":
         if st.sidebar.button("Registrieren"):
             if username_input.strip()=="" or password_input.strip()=="":
@@ -82,6 +82,7 @@ if not st.session_state.user_logged_in:
                 st.sidebar.success("Registrierung erfolgreich! Bitte anmelden")
                 st.stop()
 
+    # Login
     if st.sidebar.button("Anmelden"):
         if username_input=="admin" and password_input=="adminpasswort":
             st.session_state.is_admin = True
@@ -159,6 +160,7 @@ if user_plans:
 else:
     st.info("Keine Trainingspläne vorhanden")
 
+# Dropdown für Auswahl oder neuen Plan erstellen
 if user_plans:
     options = user_plans.copy()
     options.append("Neuen Plan erstellen")
@@ -167,12 +169,27 @@ else:
     choice = "Neuen Plan erstellen"
 
 # ----------------------
+# Hilfsfunktion: One-Rep-Max nach Tabelle
+# ----------------------
+def estimate_1rm(weight, reps):
+    if reps < 1:
+        return weight
+    if reps > 20:
+        reps = 20
+    percentage_lookup = {
+        1: 100, 2: 97, 3: 94, 4: 92, 5: 89, 6: 86, 7: 83, 8: 81, 9: 78, 10: 75,
+        11: 73, 12: 71, 13: 70, 14: 68, 15: 67, 16: 65, 17: 64, 18: 63, 19: 61, 20: 60
+    }
+    return weight / (percentage_lookup[reps]/100)
+
+# ----------------------
 # Plan erstellen oder bearbeiten
 # ----------------------
 if choice=="Neuen Plan erstellen" or st.session_state.edit_plan:
     if st.session_state.edit_plan:
         plan_name = st.session_state.edit_plan
         plan_days_df = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan_name)]
+
         if plan_days_df.empty:
             st.warning("Dieser Plan existiert nicht mehr!")
             st.session_state.edit_plan = None
@@ -215,7 +232,7 @@ else:
     st.session_state.current_plan = choice
 
 # ----------------------
-# Trainingsplan trainieren mit RIR
+# Trainingsplan trainieren
 # ----------------------
 if st.session_state.current_plan and choice!="Neuen Plan erstellen":
     plan = st.session_state.current_plan
@@ -241,13 +258,22 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
     for idx, ex in enumerate(exercises):
         num_sets = sets_list[idx]
         st.subheader(ex)
-        last_hist = history_df[(history_df["User"]==st.session_state.username) &
-                               (history_df["Plan"]==plan) &
-                               (history_df["Trainingstag"]==day_choice) &
-                               (history_df["Übung"]==ex)]
+
+        # Letztes Training (beste Leistung)
+        last_hist = history_df[
+            (history_df["User"]==st.session_state.username) &
+            (history_df["Plan"]==plan) &
+            (history_df["Trainingstag"]==day_choice) &
+            (history_df["Übung"]==ex)
+        ]
         if not last_hist.empty:
-            last_entry = last_hist.sort_values("Datum").iloc[-1]
-            st.info(f"Letztes Training: Gewicht {last_entry['Gewicht']} kg, Wiederholungen {last_entry['Wiederholungen']}, RIR {last_entry.get('RIR','-')}")
+            last_session = last_hist.copy()
+            last_session["1RM"] = last_session.apply(lambda row: estimate_1rm(row["Gewicht"], row["Wiederholungen"]), axis=1)
+            best_set = last_session.loc[last_session["1RM"].idxmax()]
+            st.info(
+                f"Letztes Training (beste Leistung): {best_set['Gewicht']} kg x {best_set['Wiederholungen']} Wiederholungen, "
+                f"RIR {best_set.get('RIR','-')}"
+            )
 
         for i in range(num_sets):
             cols = st.columns(4)

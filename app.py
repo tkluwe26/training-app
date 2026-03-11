@@ -21,7 +21,7 @@ def load_csv(file, columns):
         df.to_csv(file, index=False)
     return df
 
-users_df = load_csv(USERS_FILE, ["Email","User","Password"])
+users_df = load_csv(USERS_FILE, ["User","Password"])
 plans_df = load_csv(PLANS_FILE, ["User","Planname","Trainingstag","Übungen","Sätze"])
 history_df = load_csv(HISTORY_FILE, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","Datum"])
 
@@ -49,20 +49,18 @@ for key, default in [
 st.sidebar.header("Login / Registrierung")
 mode = st.sidebar.radio("Modus", ["Login","Registrieren"])
 
-email_input = st.sidebar.text_input("E-Mail")
 username_input = st.sidebar.text_input("Benutzername")
 password_input = st.sidebar.text_input("Passwort", type="password")
 
 # Registrierung
 if mode=="Registrieren":
     if st.sidebar.button("Registrieren"):
-        if username_input.strip()=="" or password_input.strip()=="" or email_input.strip()=="":
-            st.sidebar.error("Bitte alles ausfüllen")
+        if username_input.strip()=="" or password_input.strip()=="":
+            st.sidebar.error("Bitte Benutzername & Passwort ausfüllen")
         elif username_input in users_df["User"].values:
             st.sidebar.error("Benutzername existiert bereits")
         else:
             users_df = pd.concat([users_df, pd.DataFrame([{
-                "Email": email_input,
                 "User": username_input,
                 "Password": password_input
             }])], ignore_index=True)

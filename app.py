@@ -117,31 +117,52 @@ def admin_panel():
 # Trainingsplan erstellen
 # ----------------------------
 def create_plan():
-    st.subheader("Create plan")
+    st.subheader("Create a new plan")
+    
+    # Planname und Anzahl Tage
     plan_name = st.text_input("Plan name", key="plan_name")
-    num_days = st.number_input("Number of training days", 1, 7, 3, key="num_days")
-    exercises_data = []
+    num_days = st.number_input("Number of training days", min_value=1, max_value=7, value=3, key="num_days")
 
+    if "plan_data" not in st.session_state:
+        st.session_state.plan_data = {}  # speichert alle Tage & Übungen temporär
+
+    # Für jeden Tag
     for d in range(num_days):
         st.markdown(f"### Day {d+1}")
-        day_name = st.text_input("Day name", key=f"dayname{d}")
-        num_ex = st.number_input("Exercises", 1, 10, 3, key=f"exnum{d}")
+        
+        day_key = f"dayname_{d}"
+        day_name = st.text_input("Day name", key=day_key)
+
+        ex_count_key = f"excount_{d}"
+        num_ex = st.number_input("Number of exercises", 1, 10, 3, key=ex_count_key)
+
+        if d not in st.session_state.plan_data:
+            st.session_state.plan_data[d] = {}
+
+        st.session_state.plan_data[d]["day_name"] = day_name
+        st.session_state.plan_data[d]["exercises"] = []
+
         for e in range(num_ex):
-            ex = st.text_input("Exercise", key=f"ex{d}{e}")
-            sets = st.number_input("Sets", 1, 10, 3, key=f"sets{d}{e}")
-            exercises_data.append([day_name, ex, sets])
+            ex_key = f"ex_{d}_{e}"
+            set_key = f"sets_{d}_{e}"
+            ex_name = st.text_input("Exercise name", key=ex_key)
+            sets = st.number_input("Sets", 1, 10, 3, key=set_key)
+            st.session_state.plan_data[d]["exercises"].append((ex_name, sets))
 
     if st.button("Save plan"):
-        for row in exercises_data:
-            plans_df.loc[len(plans_df)] = [
-                st.session_state.username,
-                plan_name,
-                row[0],
-                row[1],
-                row[2]
-            ]
+        for d in st.session_state.plan_data:
+            day_name = st.session_state.plan_data[d]["day_name"]
+            for ex_name, sets in st.session_state.plan_data[d]["exercises"]:
+                plans_df.loc[len(plans_df)] = [
+                    st.session_state.username,
+                    plan_name,
+                    day_name,
+                    ex_name,
+                    sets
+                ]
         plans_df.to_csv(PLANS_FILE, index=False)
         st.success("Plan saved")
+        st.session_state.plan_data = {}  # Reset
         st.experimental_rerun()
 
 

@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 st.set_page_config(page_title="Multi-User Trainings-App", layout="wide")
-st.title("🏋️ Mehrbenutzer Trainings-App mit Registrierung")
+st.title("🏋️ Mehrbenutzer Trainings-App (stabilisiert)")
 
 # ------------------------------
 # Admin Passwort
@@ -19,17 +19,22 @@ plans_file = "plans.csv"
 history_file = "training_history.csv"
 
 # ------------------------------
-# CSV-Dateien laden oder erstellen
+# CSVs laden oder erstellen + Spalten prüfen
 # ------------------------------
-if os.path.exists(users_file):
-    users_df = pd.read_csv(users_file)
-else:
-    users_df = pd.DataFrame(columns=["User", "Password"])
+def load_csv(file_path, columns):
+    if os.path.exists(file_path):
+        df = pd.read_csv(file_path)
+    else:
+        df = pd.DataFrame(columns=columns)
+    # fehlende Spalten ergänzen
+    for col in columns:
+        if col not in df.columns:
+            df[col] = ""
+    return df
 
-if os.path.exists(plans_file):
-    plans_df = pd.read_csv(plans_file)
-else:
-    plans_df = pd.DataFrame(columns=["User", "Planname", "Trainingstag", "Übungen", "Sätze"])
+users_df = load_csv(users_file, ["User", "Password"])
+plans_df = load_csv(plans_file, ["User", "Planname", "Trainingstag", "Übungen", "Sätze"])
+history_df = load_csv(history_file, ["User", "Plan", "Trainingstag", "Übung", "Satz", "Gewicht", "Wiederholungen", "Datum"])
 
 # ------------------------------
 # Sidebar: Login oder Registrierung
@@ -78,7 +83,7 @@ if not user_logged_in:
 # Trainingsplan auswählen / erstellen
 # ------------------------------
 if is_admin:
-    st.sidebar.info("Admin-Modus: Siehe alle Benutzerpläne")
+    st.sidebar.info("Admin-Modus: Zugriff auf alle Benutzerpläne")
     user_filter = st.sidebar.selectbox("Filter Benutzer (Admin)", options=["Alle"] + users_df["User"].tolist())
 else:
     user_filter = username
@@ -118,7 +123,7 @@ if selected_plan == "Neuer Plan" and not is_admin:
         selected_plan = new_plan_name
 
 # ------------------------------
-# Trainingsplan laden
+# Trainingsplan bearbeiten / Training durchführen
 # ------------------------------
 if selected_plan != "Neuer Plan":
     plan_days = plans_df[plans_df["Planname"] == selected_plan]
@@ -134,7 +139,6 @@ if selected_plan != "Neuer Plan":
     day_row = plans_df[(plans_df["Planname"] == selected_plan) &
                        (plans_df["Trainingstag"] == selected_day)].iloc[0]
     
-    # Übungen und Sätze bearbeiten
     st.subheader(f"Übungen für {selected_day} bearbeiten")
     exercises_input = st.text_area("Übungen (kommagetrennt)", value=day_row["Übungen"], height=80)
     sets_input = st.text_area("Sätze pro Übung (kommagetrennt)", value=day_row["Sätze"], height=80)
@@ -153,9 +157,6 @@ if selected_plan != "Neuer Plan":
         plans_df.to_csv(plans_file, index=False)
         st.success("Trainingstag gespeichert!")
 
-    # ------------------------------
-    # Training durchführen
-    # ------------------------------
     st.header(f"Training durchführen für {selected_day}")
     completed_data = []
     
@@ -178,9 +179,6 @@ if selected_plan != "Neuer Plan":
                     "Wiederholungen": reps
                 })
     
-    # ------------------------------
-    # Training abspeichern
-    # ------------------------------
     if st.button("Training speichern ✅"):
         if not completed_data:
             st.warning("Bitte trage Gewicht und Wiederholungen für mindestens einen Satz ein!")
@@ -188,33 +186,23 @@ if selected_plan != "Neuer Plan":
             today = datetime.today().strftime("%Y-%m-%d %H:%M")
             df_new = pd.DataFrame(completed_data)
             df_new["Datum"] = today
-            if os.path.exists(history_file):
-                df_old = pd.read_csv(history_file)
-                df = pd.concat([df_old, df_new], ignore_index=True)
-            else:
-                df = df_new
+            df = pd.concat([history_df, df_new], ignore_index=True)
             df.to_csv(history_file, index=False)
             st.success(f"Training für {selected_day} gespeichert! 📈")
             st.balloons()
     
-    # ------------------------------
-    # Trainingshistorie anzeigen
-    # ------------------------------
     st.header("📊 Trainingshistorie")
-    if os.path.exists(history_file):
-        df_hist = pd.read_csv(history_file)
-        if not is_admin:
-            df_hist_user = df_hist[df_hist["User"] == username]
-        elif is_admin and user_filter != "Alle":
-            df_hist_user = df_hist[df_hist["User"] == user_filter]
-        else:
-            df_hist_user = df_hist
-        st.dataframe(df_hist_user)
-        
-        st.subheader("Fortschritte pro Übung")
-        for ex in exercises:
-            df_ex = df_hist_user[df_hist_user["Übung"] == ex]
-            if not df_ex.empty:
-                st.line_chart(df_ex[["Gewicht", "Wiederholungen"]])
+    df_hist = pd.read_csv(history_file)
+    if not is_admin:
+        df_hist_user = df_hist[df_hist["User"] == username]
+    elif is_admin and user_filter != "Alle":
+        df_hist_user = df_hist[df_hist["User"] == user_filter]
     else:
-        st.info("Noch keine Trainingshistorie vorhanden.")
+        df_hist_user = df_hist
+    st.dataframe(df_hist_user)
+    
+    st.subheader("Fortschritte pro Übung")
+    for ex in exercises:
+        df_ex = df_hist_user[df_hist_user["Übung"] == ex]
+        if not df_ex.empty:
+            st.line_chart(df_ex[["Gewicht", "Wiederholungen"]])

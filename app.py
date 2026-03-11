@@ -3,8 +3,11 @@ import pandas as pd
 from datetime import datetime
 import os
 
-st.set_page_config(page_title="Trainings-App von Till", layout="wide")
-st.title("Progress - Training by Till")
+# ----------------------
+# Seitenlayout & Titel
+# ----------------------
+st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
+st.title("💪 FitTrack – Dein persönlicher Trainingsplan")
 
 # ----------------------
 # Dateien
@@ -32,7 +35,8 @@ for key, default in [
     ("user_logged_in", False),
     ("username", ""),
     ("is_admin", False),
-    ("current_plan", None)
+    ("current_plan", None),
+    ("edit_plan", None)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -46,10 +50,11 @@ if st.session_state.user_logged_in:
         st.session_state.username = ""
         st.session_state.is_admin = False
         st.session_state.current_plan = None
+        st.session_state.edit_plan = None
         st.experimental_rerun()
 
 # ----------------------
-# Sidebar: Login / Registrierung
+# Login / Registrierung
 # ----------------------
 if not st.session_state.user_logged_in:
     st.sidebar.header("Login / Registrierung")
@@ -98,16 +103,15 @@ if st.session_state.is_admin:
     st.header("📋 Alle registrierten Accounts")
     st.dataframe(users_df)
     st.markdown("### Accounts löschen")
-
     for user in users_df["User"]:
-        if user != "admin":
+        if user!="admin":
             cols = st.columns([4,1,1])
             cols[0].write(user)
             delete_key = f"del_user_{user}"
             confirm_key = f"confirm_del_user_{user}"
             
             if cols[1].button("Löschen", key=delete_key):
-                st.session_state[confirm_key] = True  # Setzt die Bestätigung sichtbar
+                st.session_state[confirm_key] = True
                 
             if st.session_state.get(confirm_key, False):
                 cols[2].write("⚠️ Bitte bestätigen")
@@ -115,16 +119,14 @@ if st.session_state.is_admin:
                     # Löschen von User, Plänen und Historie
                     users_df = users_df[users_df["User"] != user]
                     users_df.to_csv(USERS_FILE, index=False)
-
                     plans_df = plans_df[plans_df["User"] != user]
                     plans_df.to_csv(PLANS_FILE, index=False)
-
                     history_df = history_df[history_df["User"] != user]
                     history_df.to_csv(HISTORY_FILE, index=False)
-
                     st.success(f"Account '{user}' gelöscht!")
-                    st.session_state.pop(confirm_key, None)  # Bestätigung zurücksetzen
+                    st.session_state.pop(confirm_key, None)
                     st.experimental_rerun()
+    st.stop()
 
 # ----------------------
 # Willkommen User
@@ -132,27 +134,26 @@ if st.session_state.is_admin:
 st.header(f"Willkommen {st.session_state.username}")
 
 # ----------------------
-# Trainingsplan auswählen oder neuen erstellen + löschen
+# Trainingsplan auswählen oder erstellen + löschen + bearbeiten
 # ----------------------
 st.subheader("Trainingsplan auswählen oder erstellen")
 user_plans = list(plans_df[plans_df["User"]==st.session_state.username]["Planname"].unique())
 
-# Löschen-Funktion mit Bestätigung
 st.markdown("### Bestehende Trainingspläne")
 if user_plans:
     for plan in user_plans:
-        cols = st.columns([4,1])
+        cols = st.columns([3,1,1])
         cols[0].write(plan)
-        if cols[1].button("Löschen", key=f"del_{plan}"):
-            if st.confirm(f"Willst du den Plan '{plan}' wirklich löschen? Dies löscht auch die Trainingshistorie."):
-                # Plan löschen
-                plans_df = plans_df[~((plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan))]
-                plans_df.to_csv(PLANS_FILE,index=False)
-                # Historie löschen
-                history_df = history_df[~((history_df["User"]==st.session_state.username) & (history_df["Plan"]==plan))]
-                history_df.to_csv(HISTORY_FILE,index=False)
-                st.success(f"Trainingsplan '{plan}' gelöscht!")
-                st.experimental_rerun()
+        if cols[1].button("Bearbeiten", key=f"edit_{plan}"):
+            st.session_state.edit_plan = plan
+            st.experimental_rerun()
+        if cols[2].button("Löschen", key=f"del_{plan}"):
+            plans_df = plans_df[~((plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan))]
+            plans_df.to_csv(PLANS_FILE,index=False)
+            history_df = history_df[~((history_df["User"]==st.session_state.username) & (history_df["Plan"]==plan))]
+            history_df.to_csv(HISTORY_FILE,index=False)
+            st.success(f"Trainingsplan '{plan}' gelöscht!")
+            st.experimental_rerun()
 else:
     st.info("Keine Trainingspläne vorhanden")
 
@@ -165,24 +166,35 @@ else:
     choice = "Neuen Plan erstellen"
 
 # ----------------------
-# Neuen Plan erstellen
+# Plan erstellen oder bearbeiten
 # ----------------------
-if choice=="Neuen Plan erstellen":
-    st.subheader("📝 Neuen Trainingsplan erstellen")
-    
-    plan_name = st.text_input("Name des Trainingsplans")
-    num_days = st.number_input("Anzahl Trainingstage", min_value=1, max_value=7, value=3, step=1)
-
-    day_names = [st.text_input(f"Name Trainingstag {i+1}", value=f"Tag {i+1}") for i in range(num_days)]
+if choice=="Neuen Plan erstellen" or st.session_state.edit_plan:
+    if st.session_state.edit_plan:
+        plan_name = st.session_state.edit_plan
+        st.subheader(f"✏️ Bearbeite Plan: {plan_name}")
+        plan_days = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan_name)]
+        day_names = plan_days["Trainingstag"].tolist()
+    else:
+        st.subheader("📝 Neuen Trainingsplan erstellen")
+        plan_name = st.text_input("Name des Trainingsplans")
+        num_days = st.number_input("Anzahl Trainingstage", min_value=1, max_value=7, value=3, step=1)
+        day_names = [st.text_input(f"Name Trainingstag {i+1}", value=f"Tag {i+1}") for i in range(num_days)]
 
     exercises_dict = {}
     sets_dict = {}
     for day in day_names:
-        st.markdown(f"### {day}")
-        exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)")
-        sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)")
+        if st.session_state.edit_plan:
+            day_row = plan_days[plan_days["Trainingstag"]==day].iloc[0]
+            exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)", value=day_row["Übungen"])
+            sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)", value=day_row["Sätze"])
+        else:
+            exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)")
+            sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)")
 
-    if st.button("Trainingsplan speichern"):
+    if st.button("Plan speichern"):
+        # Löschen alter Einträge bei Bearbeitung
+        plans_df = plans_df[~((plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan_name))]
+        # Speichern
         for day in day_names:
             plans_df = pd.concat([plans_df, pd.DataFrame([{
                 "User": st.session_state.username,
@@ -191,8 +203,9 @@ if choice=="Neuen Plan erstellen":
                 "Übungen": exercises_dict[day],
                 "Sätze": sets_dict[day]
             }])], ignore_index=True)
-        plans_df.to_csv(PLANS_FILE, index=False)
-        st.success("Trainingsplan gespeichert!")
+        plans_df.to_csv(PLANS_FILE,index=False)
+        st.success("Plan gespeichert!")
+        st.session_state.edit_plan = None
         st.experimental_rerun()
 else:
     st.session_state.current_plan = choice
@@ -213,6 +226,7 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
         sets_list = []
     else:
         exercises = [ex.strip() for ex in day_row["Übungen"].split(",") if ex.strip()]
+        sets_list = []
         if day_row["Sätze"]:
             sets_list = [int(s.strip()) if s.strip().isdigit() else 2 for s in day_row["Sätze"].split(",")]
         if len(sets_list)<len(exercises):
@@ -223,8 +237,6 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
     for idx, ex in enumerate(exercises):
         num_sets = sets_list[idx]
         st.subheader(ex)
-        
-        # Letzte Trainingswerte anzeigen
         last_hist = history_df[(history_df["User"]==st.session_state.username) &
                                (history_df["Plan"]==plan) &
                                (history_df["Trainingstag"]==day_choice) &
@@ -249,6 +261,7 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
                     "Wiederholungen": reps,
                     "Datum": datetime.now().strftime("%Y-%m-%d %H:%M")
                 })
+
     if st.button("Training speichern"):
         if completed_data:
             df_new = pd.DataFrame(completed_data)
@@ -257,6 +270,10 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
             st.success("Training gespeichert!")
             st.balloons()
 
-    st.header("📊 Trainingshistorie")
-    hist_user = history_df[history_df["User"]==st.session_state.username]
-    st.dataframe(hist_user)
+    st.header(f"📊 Trainingshistorie für {day_choice}")
+    hist_user_day = history_df[
+        (history_df["User"]==st.session_state.username) &
+        (history_df["Plan"]==plan) &
+        (history_df["Trainingstag"]==day_choice)
+    ]
+    st.dataframe(hist_user_day)

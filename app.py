@@ -32,23 +32,16 @@ for key, default in [
     ("user_logged_in", False),
     ("username", ""),
     ("is_admin", False),
-    ("wizard_step", 0),
-    ("new_plan_name", ""),
-    ("num_days", 1),
-    ("day_names", []),
-    ("exercises_dict", {}),
-    ("sets_dict", {}),
     ("current_plan", None)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
 
 # ----------------------
-# Sidebar: Login / Registration
+# Sidebar: Login / Registrierung
 # ----------------------
 st.sidebar.header("Login / Registrierung")
 mode = st.sidebar.radio("Modus", ["Login","Registrieren"])
-
 username_input = st.sidebar.text_input("Benutzername")
 password_input = st.sidebar.text_input("Passwort", type="password")
 
@@ -104,72 +97,46 @@ st.header(f"Willkommen {st.session_state.username}")
 # ----------------------
 # Trainingsplan auswählen oder neuen erstellen
 # ----------------------
-if st.session_state.current_plan is None and st.session_state.wizard_step==0:
-    options = list(plans_df[plans_df["User"]==st.session_state.username]["Planname"].unique())
-    options.append("Neuen Plan erstellen")
-    choice = st.selectbox("Trainingsplan auswählen oder erstellen", options)
-    if choice=="Neuen Plan erstellen":
-        st.session_state.wizard_step = 1  # Schritt 1: Planname
-    else:
-        st.session_state.current_plan = choice
+st.subheader("Trainingsplan auswählen oder erstellen")
+options = list(plans_df[plans_df["User"]==st.session_state.username]["Planname"].unique())
+options.append("Neuen Plan erstellen")
+choice = st.selectbox("Trainingsplan auswählen oder erstellen", options)
 
-# ----------------------
-# Wizard Schritt 1: Planname & Anzahl Tage
-# ----------------------
-if st.session_state.wizard_step==1:
-    st.subheader("📝 Neuer Trainingsplan")
-    st.session_state.new_plan_name = st.text_input("Name des Trainingsplans", st.session_state.new_plan_name)
-    st.session_state.num_days = st.number_input("Anzahl Trainingstage", min_value=1, max_value=7, value=st.session_state.num_days, step=1)
-    if st.button("Weiter"):
-        st.session_state.day_names = [""]*st.session_state.num_days
-        st.session_state.wizard_step = 2
-        st.experimental_rerun()
+if choice=="Neuen Plan erstellen":
+    st.subheader("📝 Neuen Trainingsplan erstellen")
+    
+    plan_name = st.text_input("Name des Trainingsplans")
+    num_days = st.number_input("Anzahl Trainingstage", min_value=1, max_value=7, value=3, step=1)
 
-# ----------------------
-# Wizard Schritt 2: Trainingstage benennen
-# ----------------------
-if st.session_state.wizard_step==2:
-    st.subheader("🗓 Trainingstage benennen")
-    for i in range(st.session_state.num_days):
-        st.session_state.day_names[i] = st.text_input(f"Name Trainingstag {i+1}", value=st.session_state.day_names[i], key=f"dayname_{i}")
-    if st.button("Weiter"):
-        st.session_state.exercises_dict = {day:"" for day in st.session_state.day_names}
-        st.session_state.sets_dict = {day:"" for day in st.session_state.day_names}
-        st.session_state.wizard_step = 3
-        st.experimental_rerun()
+    day_names = [st.text_input(f"Name Trainingstag {i+1}", value=f"Tag {i+1}") for i in range(num_days)]
 
-# ----------------------
-# Wizard Schritt 3: Übungen + Sätze
-# ----------------------
-if st.session_state.wizard_step==3:
-    st.subheader("💪 Übungen & Sätze eintragen")
-    for day in st.session_state.day_names:
+    exercises_dict = {}
+    sets_dict = {}
+    for day in day_names:
         st.markdown(f"### {day}")
-        st.session_state.exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)", st.session_state.exercises_dict.get(day,""))
-        st.session_state.sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt, Zahl pro Übung)", st.session_state.sets_dict.get(day,""))
+        exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)")
+        sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)")
+
     if st.button("Trainingsplan speichern"):
-        for day in st.session_state.day_names:
+        for day in day_names:
             plans_df = pd.concat([plans_df, pd.DataFrame([{
                 "User": st.session_state.username,
-                "Planname": st.session_state.new_plan_name,
+                "Planname": plan_name,
                 "Trainingstag": day,
-                "Übungen": st.session_state.exercises_dict[day],
-                "Sätze": st.session_state.sets_dict[day]
+                "Übungen": exercises_dict[day],
+                "Sätze": sets_dict[day]
             }])], ignore_index=True)
         plans_df.to_csv(PLANS_FILE, index=False)
-        st.session_state.current_plan = st.session_state.new_plan_name
-        st.session_state.wizard_step = 0
-        st.session_state.new_plan_name = ""
-        st.session_state.num_days = 1
-        st.session_state.day_names = []
-        st.session_state.exercises_dict = {}
-        st.session_state.sets_dict = {}
+        st.success("Trainingsplan gespeichert!")
         st.experimental_rerun()
+
+else:
+    st.session_state.current_plan = choice
 
 # ----------------------
 # Trainingsplan trainieren
 # ----------------------
-if st.session_state.current_plan and st.session_state.wizard_step==0:
+if st.session_state.current_plan and choice!="Neuen Plan erstellen":
     plan = st.session_state.current_plan
     plan_days = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan)]
     day_choice = st.selectbox("Welchen Trainingstag trainieren?", plan_days["Trainingstag"].tolist())

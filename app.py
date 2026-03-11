@@ -7,7 +7,7 @@ import os
 # Seitenlayout & Titel
 # ----------------------
 st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
-st.title("💪 FitTrack – Dein persönlicher Trainingsplan")
+st.title("Progress - Trainingstagebuch")
 
 # ----------------------
 # Dateien

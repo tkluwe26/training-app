@@ -4,12 +4,12 @@ from datetime import datetime
 import os
 
 st.set_page_config(page_title="Multi-User Trainings-App", layout="wide")
-st.title("🏋️ Mehrbenutzer Trainings-App (stabilisiert)")
+st.title("🏋️ Mehrbenutzer Trainings-App (stabil & Session State)")
 
 # ------------------------------
 # Admin Passwort
 # ------------------------------
-ADMIN_PASSWORD = "meinAdminPasswort"  # <-- Hier dein Admin-Passwort eintragen
+ADMIN_PASSWORD = "meinAdminPasswort"  # <-- Dein Admin-Passwort
 
 # ------------------------------
 # CSV-Dateien
@@ -19,14 +19,13 @@ plans_file = "plans.csv"
 history_file = "training_history.csv"
 
 # ------------------------------
-# CSVs laden oder erstellen + Spalten prüfen
+# CSV laden oder erstellen + Spalten prüfen
 # ------------------------------
 def load_csv(file_path, columns):
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
     else:
         df = pd.DataFrame(columns=columns)
-    # fehlende Spalten ergänzen
     for col in columns:
         if col not in df.columns:
             df[col] = ""
@@ -37,62 +36,74 @@ plans_df = load_csv(plans_file, ["User", "Planname", "Trainingstag", "Übungen",
 history_df = load_csv(history_file, ["User", "Plan", "Trainingstag", "Übung", "Satz", "Gewicht", "Wiederholungen", "Datum"])
 
 # ------------------------------
+# Session State initialisieren
+# ------------------------------
+if "user_logged_in" not in st.session_state:
+    st.session_state.user_logged_in = False
+    st.session_state.is_admin = False
+    st.session_state.username = ""
+
+# ------------------------------
 # Sidebar: Login oder Registrierung
 # ------------------------------
 st.sidebar.header("Anmeldung oder Registrierung")
 mode = st.sidebar.radio("Modus", ["Login", "Registrieren"])
 
-username = st.sidebar.text_input("Benutzername")
-password = st.sidebar.text_input("Passwort", type="password")
+username_input = st.sidebar.text_input("Benutzername")
+password_input = st.sidebar.text_input("Passwort", type="password")
 
+# Registrierung
 if mode == "Registrieren":
     register = st.sidebar.button("Registrieren")
     if register:
-        if username.strip() == "" or password.strip() == "":
+        if username_input.strip() == "" or password_input.strip() == "":
             st.sidebar.error("Benutzername und Passwort dürfen nicht leer sein")
-        elif username in users_df["User"].values:
+        elif username_input in users_df["User"].values:
             st.sidebar.error("Benutzername existiert bereits")
         else:
-            users_df = pd.concat([users_df, pd.DataFrame([{"User": username, "Password": password}])], ignore_index=True)
+            users_df = pd.concat([users_df, pd.DataFrame([{"User": username_input, "Password": password_input}])], ignore_index=True)
             users_df.to_csv(users_file, index=False)
             st.sidebar.success("Registrierung erfolgreich! Du kannst dich jetzt einloggen")
             st.stop()
 
+# Login
 login = st.sidebar.button("Anmelden")
 if login:
-    if password == ADMIN_PASSWORD:
-        is_admin = True
+    if password_input == ADMIN_PASSWORD:
+        st.session_state.is_admin = True
+        st.session_state.user_logged_in = True
+        st.session_state.username = "Admin"
         st.sidebar.success("Admin angemeldet")
-        user_logged_in = True
     else:
-        is_admin = False
-        user_row = users_df[(users_df["User"] == username) & (users_df["Password"] == password)]
+        user_row = users_df[(users_df["User"] == username_input) & (users_df["Password"] == password_input)]
         if not user_row.empty:
-            st.sidebar.success(f"Willkommen {username}")
-            user_logged_in = True
+            st.session_state.username = username_input
+            st.session_state.is_admin = False
+            st.session_state.user_logged_in = True
+            st.sidebar.success(f"Willkommen {username_input}")
         else:
             st.sidebar.error("Benutzername oder Passwort falsch")
-            user_logged_in = False
-else:
-    user_logged_in = False
 
-if not user_logged_in:
+# ------------------------------
+# Stop, wenn nicht eingeloggt
+# ------------------------------
+if not st.session_state.user_logged_in:
     st.stop()
 
 # ------------------------------
 # Trainingsplan auswählen / erstellen
 # ------------------------------
-if is_admin:
+if st.session_state.is_admin:
     st.sidebar.info("Admin-Modus: Zugriff auf alle Benutzerpläne")
     user_filter = st.sidebar.selectbox("Filter Benutzer (Admin)", options=["Alle"] + users_df["User"].tolist())
 else:
-    user_filter = username
+    user_filter = st.session_state.username
 
 # Filter Trainingspläne
-if is_admin and user_filter != "Alle":
+if st.session_state.is_admin and user_filter != "Alle":
     plans_user_df = plans_df[plans_df["User"] == user_filter]
-elif not is_admin:
-    plans_user_df = plans_df[plans_df["User"] == username]
+elif not st.session_state.is_admin:
+    plans_user_df = plans_df[plans_df["User"] == st.session_state.username]
 else:
     plans_user_df = plans_df  # Admin & Alle
 
@@ -105,14 +116,14 @@ selected_plan = st.sidebar.selectbox("Wähle einen Trainingsplan", plans)
 # ------------------------------
 # Neuen Plan erstellen
 # ------------------------------
-if selected_plan == "Neuer Plan" and not is_admin:
+if selected_plan == "Neuer Plan" and not st.session_state.is_admin:
     new_plan_name = st.sidebar.text_input("Name des neuen Trainingsplans")
     num_days = st.sidebar.slider("Wie viele Trainingstage soll der Plan haben?", 1, 7, 3)
     create_plan = st.sidebar.button("Plan erstellen")
     if create_plan and new_plan_name:
         for i in range(1, num_days + 1):
             plans_df = pd.concat([plans_df, pd.DataFrame([{
-                "User": username,
+                "User": st.session_state.username,
                 "Planname": new_plan_name,
                 "Trainingstag": f"Tag {i}",
                 "Übungen": "",
@@ -127,9 +138,9 @@ if selected_plan == "Neuer Plan" and not is_admin:
 # ------------------------------
 if selected_plan != "Neuer Plan":
     plan_days = plans_df[plans_df["Planname"] == selected_plan]
-    if not is_admin:
-        plan_days = plan_days[plan_days["User"] == username]
-    elif is_admin and user_filter != "Alle":
+    if not st.session_state.is_admin:
+        plan_days = plan_days[plan_days["User"] == st.session_state.username]
+    elif st.session_state.is_admin and user_filter != "Alle":
         plan_days = plan_days[plan_days["User"] == user_filter]
     
     plan_days_list = plan_days["Trainingstag"].tolist()
@@ -153,7 +164,7 @@ if selected_plan != "Neuer Plan":
     if st.button("Speichern"):
         plans_df.loc[(plans_df["Planname"] == selected_plan) & (plans_df["Trainingstag"] == selected_day), "Übungen"] = exercises_input
         plans_df.loc[(plans_df["Planname"] == selected_plan) & (plans_df["Trainingstag"] == selected_day), "Sätze"] = sets_input
-        plans_df.loc[(plans_df["Planname"] == selected_plan) & (plans_df["Trainingstag"] == selected_day), "User"] = username
+        plans_df.loc[(plans_df["Planname"] == selected_plan) & (plans_df["Trainingstag"] == selected_day), "User"] = st.session_state.username
         plans_df.to_csv(plans_file, index=False)
         st.success("Trainingstag gespeichert!")
 
@@ -166,11 +177,11 @@ if selected_plan != "Neuer Plan":
         for i in range(num_sets):
             cols = st.columns(3)
             cols[0].write(f"Satz {i+1}")
-            weight = cols[1].number_input("Gewicht (kg)", min_value=0.0, step=0.5, key=f"{username}_{selected_plan}_{selected_day}_{ex}_{i}_weight")
-            reps = cols[2].number_input("Wiederholungen", min_value=0, step=1, key=f"{username}_{selected_plan}_{selected_day}_{ex}_{i}_reps")
+            weight = cols[1].number_input("Gewicht (kg)", min_value=0.0, step=0.5, key=f"{st.session_state.username}_{selected_plan}_{selected_day}_{ex}_{i}_weight")
+            reps = cols[2].number_input("Wiederholungen", min_value=0, step=1, key=f"{st.session_state.username}_{selected_plan}_{selected_day}_{ex}_{i}_reps")
             if weight > 0 and reps > 0:
                 completed_data.append({
-                    "User": username,
+                    "User": st.session_state.username,
                     "Plan": selected_plan,
                     "Trainingstag": selected_day,
                     "Übung": ex,
@@ -193,14 +204,19 @@ if selected_plan != "Neuer Plan":
     
     st.header("📊 Trainingshistorie")
     df_hist = pd.read_csv(history_file)
-    if not is_admin:
-        df_hist_user = df_hist[df_hist["User"] == username]
-    elif is_admin and user_filter != "Alle":
+    if not st.session_state.is_admin:
+        df_hist_user = df_hist[df_hist["User"] == st.session_state.username]
+    elif st.session_state.is_admin and user_filter != "Alle":
         df_hist_user = df_hist[df_hist["User"] == user_filter]
     else:
         df_hist_user = df_hist
     st.dataframe(df_hist_user)
     
+    st.subheader("Fortschritte pro Übung")
+    for ex in exercises:
+        df_ex = df_hist_user[df_hist_user["Übung"] == ex]
+        if not df_ex.empty:
+            st.line_chart(df_ex[["Gewicht", "Wiederholungen"]])
     st.subheader("Fortschritte pro Übung")
     for ex in exercises:
         df_ex = df_hist_user[df_hist_user["Übung"] == ex]

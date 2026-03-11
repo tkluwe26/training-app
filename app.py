@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 st.set_page_config(page_title="Trainings-App", layout="wide")
-st.title("🏋️ Trainings-App Simplified")
+st.title("🏋️ Trainings-App")
 
 # ----------------------
 # Dateien
@@ -95,10 +95,32 @@ if st.session_state.is_admin:
 st.header(f"Willkommen {st.session_state.username}")
 
 # ----------------------
-# Trainingsplan auswählen oder neuen erstellen
+# Trainingsplan auswählen oder neuen erstellen + löschen
 # ----------------------
 st.subheader("Trainingsplan auswählen oder erstellen")
-options = list(plans_df[plans_df["User"]==st.session_state.username]["Planname"].unique())
+user_plans = list(plans_df[plans_df["User"]==st.session_state.username]["Planname"].unique())
+
+# Löschen-Funktion mit Bestätigung
+st.markdown("### Bestehende Trainingspläne")
+if user_plans:
+    for plan in user_plans:
+        cols = st.columns([4,1])
+        cols[0].write(plan)
+        if cols[1].button("Löschen", key=f"del_{plan}"):
+            if st.confirm(f"Willst du den Plan '{plan}' wirklich löschen? Dies löscht auch die Trainingshistorie."):
+                # Plan löschen
+                plans_df = plans_df[~((plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan))]
+                plans_df.to_csv(PLANS_FILE,index=False)
+                # Historie löschen
+                history_df = history_df[~((history_df["User"]==st.session_state.username) & (history_df["Plan"]==plan))]
+                history_df.to_csv(HISTORY_FILE,index=False)
+                st.success(f"Trainingsplan '{plan}' gelöscht!")
+                st.experimental_rerun()
+else:
+    st.info("Keine Trainingspläne vorhanden")
+
+# Dropdown für Auswahl oder neuen Plan erstellen
+options = user_plans.copy()
 options.append("Neuen Plan erstellen")
 choice = st.selectbox("Trainingsplan auswählen oder erstellen", options)
 

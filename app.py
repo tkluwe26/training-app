@@ -162,24 +162,7 @@ if st.session_state.is_admin:
 # Willkommen User
 # ----------------------
 st.header(f"Willkommen {st.session_state.username}")
-st.subheader("📅 Trainingsübersicht")
 
-user_history = history_df[history_df["User"] == st.session_state.username]
-
-if not user_history.empty:
-
-    st.write("Letzte Trainingseinträge")
-
-    recent = user_history.sort_values("Datum", ascending=False).head(10)
-
-    st.dataframe(recent)
-
-    total_sessions = user_history["Datum"].nunique()
-
-    st.metric("Gesamte Trainingseinheiten", total_sessions)
-
-else:
-    st.info("Noch keine Trainings gespeichert.")
 
 # ----------------------
 # Trainingsplan auswählen oder erstellen

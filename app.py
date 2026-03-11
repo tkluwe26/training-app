@@ -98,20 +98,33 @@ if st.session_state.is_admin:
     st.header("📋 Alle registrierten Accounts")
     st.dataframe(users_df)
     st.markdown("### Accounts löschen")
+
     for user in users_df["User"]:
-        if user!="admin":
-            if st.button(f"Lösche Account: {user}", key=f"del_user_{user}"):
-                if st.confirm(f"Willst du den Account '{user}' wirklich löschen?"):
+        if user != "admin":
+            cols = st.columns([4,1,1])
+            cols[0].write(user)
+            delete_key = f"del_user_{user}"
+            confirm_key = f"confirm_del_user_{user}"
+            
+            if cols[1].button("Löschen", key=delete_key):
+                st.session_state[confirm_key] = True  # Setzt die Bestätigung sichtbar
+                
+            if st.session_state.get(confirm_key, False):
+                cols[2].write("⚠️ Bitte bestätigen")
+                if cols[2].button("Ja, löschen", key=f"confirm_{user}"):
+                    # Löschen von User, Plänen und Historie
                     users_df = users_df[users_df["User"] != user]
-                    users_df.to_csv(USERS_FILE,index=False)
-                    # Auch Pläne und Historie des Users löschen
+                    users_df.to_csv(USERS_FILE, index=False)
+
                     plans_df = plans_df[plans_df["User"] != user]
-                    plans_df.to_csv(PLANS_FILE,index=False)
+                    plans_df.to_csv(PLANS_FILE, index=False)
+
                     history_df = history_df[history_df["User"] != user]
-                    history_df.to_csv(HISTORY_FILE,index=False)
+                    history_df.to_csv(HISTORY_FILE, index=False)
+
                     st.success(f"Account '{user}' gelöscht!")
+                    st.session_state.pop(confirm_key, None)  # Bestätigung zurücksetzen
                     st.experimental_rerun()
-    st.stop()
 
 # ----------------------
 # Willkommen User

@@ -388,16 +388,18 @@ if st.button("Training speichern"):
 # Trainingshistorie
 # ----------------------
 
-st.header(f"📊 Trainingshistorie für {day_choice}")
-
 hist_user_day = history_df[
     (history_df["User"] == st.session_state.username) &
     (history_df["Plan"] == plan) &
     (history_df["Trainingstag"] == day_choice)
 ]
 
-st.dataframe(hist_user_day)
+with st.expander("📊 Trainingshistorie anzeigen"):
 
+    if not hist_user_day.empty:
+        st.dataframe(hist_user_day.sort_values("Datum", ascending=False))
+    else:
+        st.info("Noch keine Trainings gespeichert.")
 
 # ----------------------
 # Progress Charts (1RM)

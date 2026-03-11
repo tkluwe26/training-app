@@ -32,6 +32,12 @@ users_df = load_csv(USERS_FILE, ["User","Password"])
 plans_df = load_csv(PLANS_FILE, ["User","Planname","Trainingstag","Übungen","Sätze"])
 history_df = load_csv(HISTORY_FILE, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","RIR","Datum"])
 
+# TEMPORÄRER PASSWORT-RESET
+users_df.loc[users_df["User"]=="dein_username", "Password"] = "temp123"
+users_df.to_csv(USERS_FILE, index=False)
+st.write("Passwort wurde temporär auf 'temp123' gesetzt. Bitte melde dich damit an!")
+st.stop()
+
 # ----------------------
 # Session State Init
 # ----------------------

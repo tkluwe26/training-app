@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import altair as alt
 
 # ----------------------
 # Seitenlayout & Titel
@@ -161,6 +162,24 @@ if st.session_state.is_admin:
 # Willkommen User
 # ----------------------
 st.header(f"Willkommen {st.session_state.username}")
+st.subheader("📅 Trainingsübersicht")
+
+user_history = history_df[history_df["User"] == st.session_state.username]
+
+if not user_history.empty:
+
+    st.write("Letzte Trainingseinträge")
+
+    recent = user_history.sort_values("Datum", ascending=False).head(10)
+
+    st.dataframe(recent)
+
+    total_sessions = user_history["Datum"].nunique()
+
+    st.metric("Gesamte Trainingseinheiten", total_sessions)
+
+else:
+    st.info("Noch keine Trainings gespeichert.")
 
 # ----------------------
 # Trainingsplan auswählen oder erstellen
@@ -263,53 +282,156 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
         if len(sets_list)<len(exercises):
             sets_list += [2]*(len(exercises)-len(sets_list))
 
-    st.header(f"Training: {day_choice}")
-    completed_data=[]
-    for idx, ex in enumerate(exercises):
-        num_sets = sets_list[idx]
-        st.subheader(ex)
-        last_hist = history_df[(history_df["User"]==st.session_state.username) &
-                               (history_df["Plan"]==plan) &
-                               (history_df["Trainingstag"]==day_choice) &
-                               (history_df["Übung"]==ex)]
-        # Maximalperformance bestimmen
-        max_perf = None
-        if not last_hist.empty:
-            last_hist["OneRM"] = last_hist.apply(lambda row: row["Gewicht"]*(1+(row["Wiederholungen"]-1)*0.033), axis=1)
-            best_row = last_hist.loc[last_hist["OneRM"].idxmax()]
-            st.info(f"Letztes Training (max Leistung): Gewicht {best_row['Gewicht']} kg, Wiederholungen {best_row['Wiederholungen']}, RIR {best_row.get('RIR','?')}")
+st.header(f"Training: {day_choice}")
 
-        for i in range(num_sets):
-            cols = st.columns(3)
-            cols[0].write(f"Satz {i+1}")
-            weight = cols[1].number_input("Gewicht (kg)", min_value=0.0, step=0.5, key=f"{plan}_{day_choice}_{ex}_{i}_weight")
-            reps = cols[2].number_input("Wiederholungen", min_value=0, step=1, key=f"{plan}_{day_choice}_{ex}_{i}_reps")
-            rir = cols[2].number_input("RIR", min_value=0, step=1, key=f"{plan}_{day_choice}_{ex}_{i}_rir")
-            if weight>0 and reps>0:
-                completed_data.append({
-                    "User": st.session_state.username,
-                    "Plan": plan,
-                    "Trainingstag": day_choice,
-                    "Übung": ex,
-                    "Satz": i+1,
-                    "Gewicht": weight,
-                    "Wiederholungen": reps,
-                    "RIR": rir,
-                    "Datum": datetime.now().strftime("%Y-%m-%d %H:%M")
-                })
+completed_data = []
 
-    if st.button("Training speichern"):
-        if completed_data:
-            df_new = pd.DataFrame(completed_data)
-            history_df = pd.concat([history_df, df_new], ignore_index=True)
-            history_df.to_csv(HISTORY_FILE, index=False)
-            st.success("Training gespeichert!")
-            st.balloons()
+for idx, ex in enumerate(exercises):
 
-    st.header(f"📊 Trainingshistorie für {day_choice}")
-    hist_user_day = history_df[
-        (history_df["User"]==st.session_state.username) &
-        (history_df["Plan"]==plan) &
-        (history_df["Trainingstag"]==day_choice)
+    num_sets = sets_list[idx]
+
+    st.subheader(ex)
+
+    last_hist = history_df[
+        (history_df["User"] == st.session_state.username) &
+        (history_df["Plan"] == plan) &
+        (history_df["Trainingstag"] == day_choice) &
+        (history_df["Übung"] == ex)
     ]
-    st.dataframe(hist_user_day)
+
+    previous_pr = None
+
+    if not last_hist.empty:
+
+        last_hist = last_hist.copy()
+
+        last_hist["OneRM"] = last_hist.apply(
+            lambda row: row["Gewicht"] * (1 + (row["Wiederholungen"] - 1) * 0.033),
+            axis=1
+        )
+
+        best_row = last_hist.loc[last_hist["OneRM"].idxmax()]
+        previous_pr = last_hist["OneRM"].max()
+
+        st.info(
+            f"Letztes Training (max Leistung): Gewicht {best_row['Gewicht']} kg, "
+            f"Wiederholungen {best_row['Wiederholungen']}, RIR {best_row.get('RIR','?')}"
+        )
+
+    for i in range(num_sets):
+
+        cols = st.columns(3)
+
+        cols[0].write(f"Satz {i+1}")
+
+        weight = cols[1].number_input(
+            "Gewicht (kg)",
+            min_value=0.0,
+            step=0.5,
+            key=f"{plan}_{day_choice}_{ex}_{i}_weight"
+        )
+
+        reps = cols[2].number_input(
+            "Wiederholungen",
+            min_value=0,
+            step=1,
+            key=f"{plan}_{day_choice}_{ex}_{i}_reps"
+        )
+
+        rir = cols[2].number_input(
+            "RIR",
+            min_value=0,
+            step=1,
+            key=f"{plan}_{day_choice}_{ex}_{i}_rir"
+        )
+
+        if weight > 0 and reps > 0:
+
+            current_orm = weight * (1 + (reps - 1) * 0.033)
+
+            if previous_pr is not None and current_orm > previous_pr:
+                st.success("🏆 Neuer Personal Record!")
+
+            completed_data.append({
+                "User": st.session_state.username,
+                "Plan": plan,
+                "Trainingstag": day_choice,
+                "Übung": ex,
+                "Satz": i+1,
+                "Gewicht": weight,
+                "Wiederholungen": reps,
+                "RIR": rir,
+                "Datum": datetime.now().strftime("%Y-%m-%d %H:%M")
+            })
+
+
+# ----------------------
+# Training speichern
+# ----------------------
+
+if st.button("Training speichern"):
+
+    if completed_data:
+
+        df_new = pd.DataFrame(completed_data)
+
+        history_df = pd.concat([history_df, df_new], ignore_index=True)
+
+        history_df.to_csv(HISTORY_FILE, index=False)
+
+        st.success("Training gespeichert!")
+
+        st.balloons()
+
+
+# ----------------------
+# Trainingshistorie
+# ----------------------
+
+st.header(f"📊 Trainingshistorie für {day_choice}")
+
+hist_user_day = history_df[
+    (history_df["User"] == st.session_state.username) &
+    (history_df["Plan"] == plan) &
+    (history_df["Trainingstag"] == day_choice)
+]
+
+st.dataframe(hist_user_day)
+
+
+# ----------------------
+# Progress Charts (1RM)
+# ----------------------
+
+st.subheader("📈 Fortschritt pro Übung")
+
+for ex in hist_user_day["Übung"].unique():
+
+    exercise_hist = hist_user_day[hist_user_day["Übung"] == ex].copy()
+
+    if len(exercise_hist) > 1:
+
+        exercise_hist["Datum"] = pd.to_datetime(exercise_hist["Datum"])
+
+        # 1RM berechnen
+        exercise_hist["OneRM"] = exercise_hist["Gewicht"] * (
+            1 + (exercise_hist["Wiederholungen"] - 1) * 0.033
+        )
+
+        # pro Training nur bester Satz
+        exercise_hist = (
+            exercise_hist
+            .sort_values("OneRM")
+            .groupby("Datum")
+            .last()
+            .reset_index()
+        )
+
+        chart = alt.Chart(exercise_hist).mark_line(point=True).encode(
+            x=alt.X("Datum:T", title="Datum"),
+            y=alt.Y("OneRM:Q", title="Estimated 1RM (kg)")
+        ).properties(
+            title=f"{ex} Kraftentwicklung"
+        )
+
+        st.altair_chart(chart, use_container_width=True)

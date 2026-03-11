@@ -166,14 +166,20 @@ else:
     choice = "Neuen Plan erstellen"
 
 # ----------------------
-# Plan erstellen oder bearbeiten
+# Plan erstellen oder bearbeiten (robust gegen AttributeError)
 # ----------------------
 if choice=="Neuen Plan erstellen" or st.session_state.edit_plan:
     if st.session_state.edit_plan:
         plan_name = st.session_state.edit_plan
-        st.subheader(f"✏️ Bearbeite Plan: {plan_name}")
-        plan_days = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan_name)]
-        day_names = plan_days["Trainingstag"].tolist()
+        plan_days_df = plans_df[(plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan_name)]
+
+        if plan_days_df.empty:
+            st.warning("Dieser Plan existiert nicht mehr!")
+            st.session_state.edit_plan = None
+            st.experimental_rerun()
+        else:
+            st.subheader(f"✏️ Bearbeite Plan: {plan_name}")
+            day_names = plan_days_df["Trainingstag"].tolist()
     else:
         st.subheader("📝 Neuen Trainingsplan erstellen")
         plan_name = st.text_input("Name des Trainingsplans")
@@ -184,17 +190,15 @@ if choice=="Neuen Plan erstellen" or st.session_state.edit_plan:
     sets_dict = {}
     for day in day_names:
         if st.session_state.edit_plan:
-            day_row = plan_days[plan_days["Trainingstag"]==day].iloc[0]
-            exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)", value=day_row["Übungen"])
-            sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)", value=day_row["Sätze"])
+            day_row = plan_days_df[plan_days_df["Trainingstag"]==day].iloc[0]
+            exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)", value=day_row.get("Übungen",""))
+            sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)", value=day_row.get("Sätze",""))
         else:
             exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)")
             sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)")
 
     if st.button("Plan speichern"):
-        # Löschen alter Einträge bei Bearbeitung
         plans_df = plans_df[~((plans_df["User"]==st.session_state.username) & (plans_df["Planname"]==plan_name))]
-        # Speichern
         for day in day_names:
             plans_df = pd.concat([plans_df, pd.DataFrame([{
                 "User": st.session_state.username,

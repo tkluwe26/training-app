@@ -79,7 +79,6 @@ if not st.session_state.user_logged_in:
             }])], ignore_index=True)
             users_df.to_csv(USERS_FILE,index=False)
             st.sidebar.success("Registrierung erfolgreich! Bitte anmelden")
-            st.experimental_rerun()  # sofort rerun, kein st.stop()
 
     # Login
     if st.sidebar.button("Anmelden"):
@@ -88,7 +87,6 @@ if not st.session_state.user_logged_in:
             st.session_state.user_logged_in = True
             st.session_state.username = "admin"
             st.sidebar.success("Admin angemeldet")
-            st.experimental_rerun()  # sofort rerun
         else:
             row = users_df[(users_df["User"]==username_input)&(users_df["Password"]==password_input)]
             if not row.empty:
@@ -96,9 +94,11 @@ if not st.session_state.user_logged_in:
                 st.session_state.username = username_input
                 st.session_state.is_admin = False
                 st.sidebar.success(f"Willkommen {username_input}")
-                st.experimental_rerun()  # sofort rerun
             else:
                 st.sidebar.error("Benutzername oder Passwort falsch")
+    # Kein st.stop() mehr – App läuft weiter
+    st.stop()
+
 # ----------------------
 # Admin Ansicht
 # ----------------------

@@ -34,15 +34,18 @@ plans_df = load_csv(plans_file, ["User","Planname","Trainingstag","Übungen","S�
 history_df = load_csv(history_file, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","Datum"])
 
 # ------------------------------
-# Session State
+# Session State Initialisierung
 # ------------------------------
-if "user_logged_in" not in st.session_state:
-    st.session_state.user_logged_in = False
-    st.session_state.is_admin = False
-    st.session_state.username = ""
-    st.session_state.current_plan = None
-    st.session_state.creating_plan = False
-    st.session_state.new_plan_days = []
+for key, default in [
+    ("user_logged_in", False),
+    ("is_admin", False),
+    ("username", ""),
+    ("current_plan", None),
+    ("creating_plan", False),
+    ("new_plan_days", []),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # ------------------------------
 # Sidebar Login/Registrierung
@@ -86,10 +89,9 @@ if not st.session_state.user_logged_in:
 # ------------------------------
 # Startfenster: Plan auswählen oder erstellen
 # ------------------------------
-if not st.session_state.creating_plan:
+if not st.session_state.creating_plan and st.session_state.current_plan is None:
     st.header("🏋️ Trainingsplan auswählen oder neu erstellen")
     
-    # Filter Pläne
     if st.session_state.is_admin:
         user_filter = st.selectbox("Benutzer (Admin)", options=["Alle"] + users_df["User"].tolist())
     else:
@@ -123,7 +125,7 @@ if st.session_state.creating_plan:
 
     # Trainingstage benennen
     while len(st.session_state.new_plan_days) < num_days:
-        day_name = st.text_input(f"Name für Trainingstag {len(st.session_state.new_plan_days)+1}")
+        day_name = st.text_input(f"Name für Trainingstag {len(st.session_state.new_plan_days)+1}", key=f"day_name_{len(st.session_state.new_plan_days)+1}")
         if st.button(f"Tag {len(st.session_state.new_plan_days)+1} speichern"):
             if day_name.strip()!="":
                 st.session_state.new_plan_days.append(day_name)
@@ -150,6 +152,7 @@ if st.session_state.creating_plan:
             plans_df.to_csv(plans_file,index=False)
             st.success("Trainingsplan erstellt!")
             st.session_state.creating_plan = False
+            st.session_state.current_plan = None
             st.experimental_rerun()
 
 # ------------------------------

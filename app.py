@@ -38,47 +38,57 @@ for key, default in [
         st.session_state[key] = default
 
 # ----------------------
+# Abmelden-Funktion
+# ----------------------
+if st.session_state.user_logged_in:
+    if st.sidebar.button("Abmelden"):
+        st.session_state.user_logged_in = False
+        st.session_state.username = ""
+        st.session_state.is_admin = False
+        st.session_state.current_plan = None
+        st.experimental_rerun()
+
+# ----------------------
 # Sidebar: Login / Registrierung
 # ----------------------
-st.sidebar.header("Login / Registrierung")
-mode = st.sidebar.radio("Modus", ["Login","Registrieren"])
-username_input = st.sidebar.text_input("Benutzername")
-password_input = st.sidebar.text_input("Passwort", type="password")
-
-# Registrierung
-if mode=="Registrieren":
-    if st.sidebar.button("Registrieren"):
-        if username_input.strip()=="" or password_input.strip()=="":
-            st.sidebar.error("Bitte Benutzername & Passwort ausfüllen")
-        elif username_input in users_df["User"].values:
-            st.sidebar.error("Benutzername existiert bereits")
-        else:
-            users_df = pd.concat([users_df, pd.DataFrame([{
-                "User": username_input,
-                "Password": password_input
-            }])], ignore_index=True)
-            users_df.to_csv(USERS_FILE,index=False)
-            st.sidebar.success("Registrierung erfolgreich! Bitte anmelden")
-            st.stop()
-
-# Login
-if st.sidebar.button("Anmelden"):
-    if username_input=="admin" and password_input=="adminpasswort":
-        st.session_state.is_admin = True
-        st.session_state.user_logged_in = True
-        st.session_state.username = "admin"
-        st.sidebar.success("Admin angemeldet")
-    else:
-        row = users_df[(users_df["User"]==username_input)&(users_df["Password"]==password_input)]
-        if not row.empty:
-            st.session_state.user_logged_in = True
-            st.session_state.username = username_input
-            st.session_state.is_admin = False
-            st.sidebar.success(f"Willkommen {username_input}")
-        else:
-            st.sidebar.error("Benutzername oder Passwort falsch")
-
 if not st.session_state.user_logged_in:
+    st.sidebar.header("Login / Registrierung")
+    mode = st.sidebar.radio("Modus", ["Login","Registrieren"])
+    username_input = st.sidebar.text_input("Benutzername")
+    password_input = st.sidebar.text_input("Passwort", type="password")
+
+    # Registrierung
+    if mode=="Registrieren":
+        if st.sidebar.button("Registrieren"):
+            if username_input.strip()=="" or password_input.strip()=="":
+                st.sidebar.error("Bitte Benutzername & Passwort ausfüllen")
+            elif username_input in users_df["User"].values:
+                st.sidebar.error("Benutzername existiert bereits")
+            else:
+                users_df = pd.concat([users_df, pd.DataFrame([{
+                    "User": username_input,
+                    "Password": password_input
+                }])], ignore_index=True)
+                users_df.to_csv(USERS_FILE,index=False)
+                st.sidebar.success("Registrierung erfolgreich! Bitte anmelden")
+                st.stop()
+
+    # Login
+    if st.sidebar.button("Anmelden"):
+        if username_input=="admin" and password_input=="adminpasswort":
+            st.session_state.is_admin = True
+            st.session_state.user_logged_in = True
+            st.session_state.username = "admin"
+            st.sidebar.success("Admin angemeldet")
+        else:
+            row = users_df[(users_df["User"]==username_input)&(users_df["Password"]==password_input)]
+            if not row.empty:
+                st.session_state.user_logged_in = True
+                st.session_state.username = username_input
+                st.session_state.is_admin = False
+                st.sidebar.success(f"Willkommen {username_input}")
+            else:
+                st.sidebar.error("Benutzername oder Passwort falsch")
     st.stop()
 
 # ----------------------
@@ -87,6 +97,20 @@ if not st.session_state.user_logged_in:
 if st.session_state.is_admin:
     st.header("📋 Alle registrierten Accounts")
     st.dataframe(users_df)
+    st.markdown("### Accounts löschen")
+    for user in users_df["User"]:
+        if user!="admin":
+            if st.button(f"Lösche Account: {user}", key=f"del_user_{user}"):
+                if st.confirm(f"Willst du den Account '{user}' wirklich löschen?"):
+                    users_df = users_df[users_df["User"] != user]
+                    users_df.to_csv(USERS_FILE,index=False)
+                    # Auch Pläne und Historie des Users löschen
+                    plans_df = plans_df[plans_df["User"] != user]
+                    plans_df.to_csv(PLANS_FILE,index=False)
+                    history_df = history_df[history_df["User"] != user]
+                    history_df.to_csv(HISTORY_FILE,index=False)
+                    st.success(f"Account '{user}' gelöscht!")
+                    st.experimental_rerun()
     st.stop()
 
 # ----------------------
@@ -125,7 +149,6 @@ if user_plans:
     options.append("Neuen Plan erstellen")
     choice = st.selectbox("Trainingsplan auswählen oder erstellen", options)
 else:
-    # Wenn keine Pläne mehr existieren, direkt "Neuen Plan erstellen"
     choice = "Neuen Plan erstellen"
 
 # ----------------------
@@ -158,7 +181,6 @@ if choice=="Neuen Plan erstellen":
         plans_df.to_csv(PLANS_FILE, index=False)
         st.success("Trainingsplan gespeichert!")
         st.experimental_rerun()
-
 else:
     st.session_state.current_plan = choice
 
@@ -188,6 +210,16 @@ if st.session_state.current_plan and choice!="Neuen Plan erstellen":
     for idx, ex in enumerate(exercises):
         num_sets = sets_list[idx]
         st.subheader(ex)
+        
+        # Letzte Trainingswerte anzeigen
+        last_hist = history_df[(history_df["User"]==st.session_state.username) &
+                               (history_df["Plan"]==plan) &
+                               (history_df["Trainingstag"]==day_choice) &
+                               (history_df["Übung"]==ex)]
+        if not last_hist.empty:
+            last_entry = last_hist.sort_values("Datum").iloc[-1]
+            st.info(f"Letztes Training: Gewicht {last_entry['Gewicht']} kg, Wiederholungen {last_entry['Wiederholungen']}")
+
         for i in range(num_sets):
             cols = st.columns(3)
             cols[0].write(f"Satz {i+1}")

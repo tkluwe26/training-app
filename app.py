@@ -163,6 +163,19 @@ if st.session_state.is_admin:
 st.header(f"Willkommen {st.session_state.username}")
 
 # ----------------------
+# Navigation
+# ----------------------
+nav_col1, nav_col2 = st.columns([1,1])
+
+if nav_col1.button("🏠 Plan-Auswahl"):
+    st.session_state.current_plan = None
+    st.session_state.edit_plan = None
+    st.rerun()
+
+if nav_col2.button("🔄 Seite aktualisieren"):
+    st.rerun()
+
+# ----------------------
 # Trainingsplan auswählen oder erstellen
 # ----------------------
 st.subheader("Trainingsplan auswählen oder erstellen")

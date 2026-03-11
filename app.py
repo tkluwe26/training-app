@@ -42,7 +42,12 @@ for key, default in [
     ("username", ""),
     ("current_plan", None),
     ("creating_plan", False),
+    ("wizard_step", 0),
+    ("new_plan_name", ""),
+    ("num_days", 1),
     ("new_plan_days", []),
+    ("exercises_dict", {}),
+    ("sets_dict", {}),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -89,9 +94,10 @@ if not st.session_state.user_logged_in:
 # ------------------------------
 # Startfenster: Plan auswählen oder erstellen
 # ------------------------------
-if not st.session_state.creating_plan and st.session_state.current_plan is None:
+if st.session_state.current_plan is None and not st.session_state.creating_plan:
     st.header("🏋️ Trainingsplan auswählen oder neu erstellen")
     
+    # Benutzerfilter für Admin
     if st.session_state.is_admin:
         user_filter = st.selectbox("Benutzer (Admin)", options=["Alle"] + users_df["User"].tolist())
     else:
@@ -111,9 +117,8 @@ if not st.session_state.creating_plan and st.session_state.current_plan is None:
     if selected_plan=="Neuer Plan":
         if st.button("Neuen Plan erstellen"):
             st.session_state.creating_plan = True
-            st.session_state.new_plan_days = []
+            st.session_state.wizard_step = 0
     else:
-        # Erst prüfen, ob der Plan tatsächlich Trainingstage/Übungen hat
         plan_rows = plans_user_df[plans_user_df["Planname"]==selected_plan]
         if not plan_rows.empty:
             st.session_state.current_plan = selected_plan
@@ -125,39 +130,58 @@ if not st.session_state.creating_plan and st.session_state.current_plan is None:
 # ------------------------------
 if st.session_state.creating_plan:
     st.header("📝 Neuen Trainingsplan erstellen")
-    new_plan_name = st.text_input("Name des Trainingsplans")
-    num_days = st.slider("Anzahl Trainingstage",1,7,3)
-
-    # Trainingstage benennen
-    while len(st.session_state.new_plan_days) < num_days:
-        day_name = st.text_input(f"Name für Trainingstag {len(st.session_state.new_plan_days)+1}", key=f"day_name_{len(st.session_state.new_plan_days)+1}")
-        if st.button(f"Tag {len(st.session_state.new_plan_days)+1} speichern"):
-            if day_name.strip()!="":
-                st.session_state.new_plan_days.append(day_name)
-                st.experimental_rerun()
     
-    # Übungen/Sätze für jeden Tag
-    if len(st.session_state.new_plan_days)==num_days:
-        exercises_dict = {}
-        sets_dict = {}
+    # Step 0: Planname
+    if st.session_state.wizard_step == 0:
+        st.session_state.new_plan_name = st.text_input("Name des Trainingsplans", st.session_state.new_plan_name)
+        if st.button("Weiter"):
+            if st.session_state.new_plan_name.strip() != "":
+                st.session_state.wizard_step = 1
+            else:
+                st.warning("Bitte einen Namen eingeben")
+    
+    # Step 1: Anzahl Trainingstage wählen
+    elif st.session_state.wizard_step == 1:
+        st.session_state.num_days = st.slider("Anzahl Trainingstage", 1, 7, st.session_state.num_days)
+        if st.button("Weiter"):
+            st.session_state.wizard_step = 2
+    
+    # Step 2: Trainingstage benennen
+    elif st.session_state.wizard_step == 2:
+        for i in range(st.session_state.num_days):
+            if len(st.session_state.new_plan_days) < st.session_state.num_days:
+                day_name = st.text_input(f"Name Trainingstag {i+1}", key=f"day_{i}")
+                if day_name.strip() != "" and st.button(f"Tag {i+1} speichern", key=f"save_day_{i}"):
+                    st.session_state.new_plan_days.append(day_name)
+                    st.experimental_rerun()
+        if len(st.session_state.new_plan_days) == st.session_state.num_days:
+            st.session_state.wizard_step = 3
+    
+    # Step 3: Übungen & Sätze eintragen
+    elif st.session_state.wizard_step == 3:
         for day in st.session_state.new_plan_days:
             st.subheader(day)
-            exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)", key=f"{day}_ex")
-            sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)", key=f"{day}_sets")
-        
+            st.session_state.exercises_dict[day] = st.text_area(f"Übungen für {day} (kommagetrennt)", st.session_state.exercises_dict.get(day, ""), key=f"{day}_ex")
+            st.session_state.sets_dict[day] = st.text_area(f"Sätze pro Übung für {day} (kommagetrennt)", st.session_state.sets_dict.get(day, ""), key=f"{day}_sets")
         if st.button("Trainingsplan speichern"):
             for day in st.session_state.new_plan_days:
-                plans_df = pd.concat([plans_df,pd.DataFrame([{
+                plans_df = pd.concat([plans_df, pd.DataFrame([{
                     "User": st.session_state.username,
-                    "Planname": new_plan_name,
+                    "Planname": st.session_state.new_plan_name,
                     "Trainingstag": day,
-                    "Übungen": exercises_dict[day],
-                    "Sätze": sets_dict[day]
-                }])],ignore_index=True)
-            plans_df.to_csv(plans_file,index=False)
+                    "Übungen": st.session_state.exercises_dict[day],
+                    "Sätze": st.session_state.sets_dict[day]
+                }])], ignore_index=True)
+            plans_df.to_csv(plans_file, index=False)
             st.success("Trainingsplan erstellt!")
+            # Reset Wizard
             st.session_state.creating_plan = False
-            st.session_state.current_plan = None
+            st.session_state.wizard_step = 0
+            st.session_state.new_plan_name = ""
+            st.session_state.num_days = 1
+            st.session_state.new_plan_days = []
+            st.session_state.exercises_dict = {}
+            st.session_state.sets_dict = {}
             st.experimental_rerun()
 
 # ------------------------------
@@ -167,9 +191,9 @@ if st.session_state.current_plan:
     selected_plan = st.session_state.current_plan
     plan_days = plans_df[plans_df["Planname"]==selected_plan]
     if not st.session_state.is_admin:
-        plan_days = plan_days[plan_days["User"]==st.session_state.username]
+        plan_days = plan_days[plans_df["User"]==st.session_state.username]
     elif st.session_state.is_admin and user_filter!="Alle":
-        plan_days = plan_days[plan_days["User"]==user_filter]
+        plan_days = plan_days[plans_df["User"]==user_filter]
     
     if plan_days.empty:
         st.info("Dieser Plan hat noch keine Trainingstage. Bitte erst Übungen eintragen.")

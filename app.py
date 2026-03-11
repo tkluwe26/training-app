@@ -1,22 +1,18 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime
 
-# --- Dateien ---
+# Datei für User-Daten
 USERS_FILE = "users.csv"
-PLANS_FILE = "plans.csv"
-HISTORY_FILE = "history.csv"
 
-# --- CSV Initialisierung ---
+# CSV initialisieren, falls sie nicht existiert
 if not os.path.exists(USERS_FILE):
     pd.DataFrame(columns=["username","password"]).to_csv(USERS_FILE,index=False)
-if not os.path.exists(PLANS_FILE):
-    pd.DataFrame(columns=["username","plan_name","day_name","exercise","sets"]).to_csv(PLANS_FILE,index=False)
-if not os.path.exists(HISTORY_FILE):
-    pd.DataFrame(columns=["username","plan_name","day_name","exercise","weight","reps","rir","date"]).to_csv(HISTORY_FILE,index=False)
 
-# --- Session-State Setup ---
+# User-Daten laden
+users_df = pd.read_csv(USERS_FILE)
+
+# Session-State für Login
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
@@ -24,17 +20,16 @@ if "username" not in st.session_state:
 if "admin_mode" not in st.session_state:
     st.session_state.admin_mode = False
 
-# --- Logout ---
+# Logout Funktion
 def logout():
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.session_state.admin_mode = False
     st.experimental_rerun()
 
-# --- Registrierung ---
+# Registrierung
 def register():
     st.subheader("Register")
-    users_df = pd.read_csv(USERS_FILE)
     username = st.text_input("Username", key="reg_user")
     password = st.text_input("Password", type="password", key="reg_pass")
     if st.button("Register"):
@@ -45,40 +40,43 @@ def register():
             users_df.to_csv(USERS_FILE,index=False)
             st.success("Registered successfully! Please login.")
 
-# --- Login ---
+# Login
 def login():
     st.subheader("Login")
-    users_df = pd.read_csv(USERS_FILE)
     username = st.text_input("Username", key="login_user")
     password = st.text_input("Password", type="password", key="login_pass")
     if st.button("Login"):
+        global users_df
+        # Admin Login
         if username=="admin" and password=="adminpasswort":
             st.session_state.logged_in = True
             st.session_state.username = username
             st.session_state.admin_mode = True
-            st.success("Logged in as admin")
-        elif username in users_df["username"].values:
-            user_row = users_df[users_df["username"]==username]
-            if user_row["password"].values[0]==password:
-                st.session_state.logged_in = True
-                st.session_state.username = username
-                st.success(f"Logged in as {username}")
-            else:
-                st.error("Incorrect password")
+        # Normaler User
+        elif username in users_df["username"].values and users_df.loc[users_df["username"]==username,"password"].values[0]==password:
+            st.session_state.logged_in = True
+            st.session_state.username = username
         else:
-            st.error("Username does not exist")
+            st.error("Invalid credentials")
         st.experimental_rerun()
 
-# --- Main ---
-st.title("ProFitness Planner")
+# Admin Panel
+def admin_panel():
+    st.subheader("Admin Panel: All Users")
+    st.write(users_df)
 
+# Main App
 if not st.session_state.logged_in:
-    tab = st.radio("Choose action",["Login","Register"])
-    if tab=="Login":
+    st.title("Multi-User App")
+    action = st.radio("Choose action", ["Login","Register"])
+    if action=="Login":
         login()
     else:
         register()
 else:
-    st.write(f"Welcome {st.session_state.username}")
+    st.write(f"Welcome {st.session_state.username}!")
+    if st.session_state.admin_mode:
+        admin_panel()
+    st.success("Glückwunsch, der Login hat funktioniert!")
     if st.button("Logout"):
         logout()

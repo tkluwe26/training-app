@@ -301,7 +301,7 @@ if st.session_state.current_plan:
             (history_df["Übung"] == ex)
         ]
     
-    if not last_hist.empty:
+        if not last_hist.empty:
     
             last_hist = last_hist.copy()
     
@@ -315,7 +315,7 @@ if st.session_state.current_plan:
                 f"Letztes Training: {best_row['Gewicht']} kg × {best_row['Wiederholungen']} (RIR {best_row.get('RIR','?')})"
             )
 
-    num_sets=sets_list[idx]
+        num_sets=sets_list[idx]
         for i in range(num_sets):
 
             cols=st.columns(3)

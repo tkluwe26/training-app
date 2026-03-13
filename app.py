@@ -301,7 +301,7 @@ if st.session_state.current_plan:
             (history_df["Übung"] == ex)
         ]
     
-        if not last_hist.empty:
+    if not last_hist.empty:
     
             last_hist = last_hist.copy()
     

@@ -290,88 +290,85 @@ if st.session_state.current_plan:
     
     completed_data=[]
     
-    for idx,ex in enumerate(exercises):
-    
-        st.subheader(ex)
-    
-        last_hist = history_df[
-            (history_df["User"] == st.session_state.username) &
-            (history_df["Plan"] == plan) &
-            (history_df["Trainingstag"] == day_choice) &
-            (history_df["Übung"] == ex)
-        ]
-    
-        if not last_hist.empty:
-    
-            last_hist = last_hist.copy()
-    
-            last_hist["OneRM"] = last_hist["Gewicht"] * (
-                1 + (last_hist["Wiederholungen"] - 1) * 0.033
-            )
-    
-            best_row = last_hist.loc[last_hist["OneRM"].idxmax()]
-    
-            st.info(
-                f"Letztes Training: {best_row['Gewicht']} kg × {best_row['Wiederholungen']} (RIR {best_row.get('RIR','?')})"
-            )
+    for idx, ex in enumerate(exercises):
 
-        num_sets=sets_list[idx]
-        for i in range(num_sets):
+    st.subheader(ex)
 
-            cols=st.columns(3)
+    # Letztes Training anzeigen
+    last_hist = history_df[
+        (history_df["User"] == st.session_state.username) &
+        (history_df["Plan"] == plan) &
+        (history_df["Trainingstag"] == day_choice) &
+        (history_df["Übung"] == ex)
+    ]
 
-            autosave_row=training_autosave_df[
-                (training_autosave_df["User"]==st.session_state.username) &
-                (training_autosave_df["Plan"]==plan) &
-                (training_autosave_df["Trainingstag"]==day_choice) &
-                (training_autosave_df["Übung"]==ex) &
-                (training_autosave_df["Satz"]==i+1)
-            ]
+    previous_pr = None
 
-            default_weight = autosave_row["Gewicht"].values[0] if not autosave_row.empty else 0.0
-            default_reps = autosave_row["Wiederholungen"].values[0] if not autosave_row.empty else 0
-            default_rir = autosave_row["RIR"].values[0] if not autosave_row.empty else 0
+    if not last_hist.empty:
+        last_hist = last_hist.copy()
+        last_hist["OneRM"] = last_hist["Gewicht"] * (1 + (last_hist["Wiederholungen"] - 1) * 0.033)
+        best_row = last_hist.loc[last_hist["OneRM"].idxmax()]
+        previous_pr = best_row["OneRM"]
+        st.info(
+            f"Letztes Training: {best_row['Gewicht']} kg × {best_row['Wiederholungen']} (RIR {best_row.get('RIR','?')})"
+        )
 
-            weight=cols[0].number_input(
-                "Gewicht",
-                value=float(default_weight),
-                step=0.5,
-                key=f"{plan}_{ex}_{i}_w"
-            )
+    # Anzahl der Sätze (sicherstellen, dass Sets existieren)
+    try:
+        num_sets = sets_list[idx]
+    except IndexError:
+        num_sets = 2  # Standardwert, falls Sätze fehlen
 
-            reps=cols[1].number_input(
-                "Reps",
-                value=int(default_reps),
-                key=f"{plan}_{ex}_{i}_r"
-            )
+    for i in range(num_sets):
 
-            rir=cols[2].number_input(
-                "RIR",
-                value=int(default_rir),
-                key=f"{plan}_{ex}_{i}_rir"
-            )
+        cols = st.columns(3)
 
-            if not autosave_row.empty:
+        weight = cols[1].number_input(
+            "Gewicht (kg)",
+            min_value=0.0,
+            step=0.5,
+            key=f"{plan}_{day_choice}_{ex}_{i}_weight"
+        )
 
-                training_autosave_df.loc[autosave_row.index,"Gewicht"]=weight
-                training_autosave_df.loc[autosave_row.index,"Wiederholungen"]=reps
-                training_autosave_df.loc[autosave_row.index,"RIR"]=rir
+        reps = cols[2].number_input(
+            "Wiederholungen",
+            min_value=0,
+            step=1,
+            key=f"{plan}_{day_choice}_{ex}_{i}_reps"
+        )
 
-            else:
+        rir = cols[2].number_input(
+            "RIR",
+            min_value=0,
+            step=1,
+            key=f"{plan}_{day_choice}_{ex}_{i}_rir"
+        )
 
-                training_autosave_df=pd.concat([
-                    training_autosave_df,
-                    pd.DataFrame([{
-                        "User":st.session_state.username,
-                        "Plan":plan,
-                        "Trainingstag":day_choice,
-                        "Übung":ex,
-                        "Satz":i+1,
-                        "Gewicht":weight,
-                        "Wiederholungen":reps,
-                        "RIR":rir
-                    }])
-                ])
+        # PR-Check + Belohnung
+        if weight > 0 and reps > 0:
+            current_orm = weight * (1 + (reps - 1) * 0.033)
+
+            pr_key = f"{plan}_{day_choice}_{ex}_pr"
+            if st.session_state.get(pr_key, 0) < current_orm:
+                st.session_state[pr_key] = current_orm
+                st.success("🏆 Neuer Personal Record!")
+                st.balloons()
+
+            # Autosave in session_state
+            autosave_key = f"{plan}_{day_choice}_{ex}_{i}"
+            st.session_state[autosave_key] = {"weight": weight, "reps": reps, "rir": rir}
+
+            completed_data.append({
+                "User": st.session_state.username,
+                "Plan": plan,
+                "Trainingstag": day_choice,
+                "Übung": ex,
+                "Satz": i + 1,
+                "Gewicht": weight,
+                "Wiederholungen": reps,
+                "RIR": rir,
+                "Datum": datetime.now().strftime("%Y-%m-%d %H:%M")
+            })
 
             save_training_autosave()
 

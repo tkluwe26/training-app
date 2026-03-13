@@ -426,7 +426,8 @@ if st.session_state.current_plan:
 
 hist_user_day=history_df[
     (history_df["User"]==st.session_state.username) &
-    (history_df["Plan"]==plan)
+    (history_df["Plan"]==plan)&
+    (history_df["Trainingstag"] == day_choice)
 ]
 
 st.subheader("Progress")

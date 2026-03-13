@@ -132,7 +132,7 @@ if not st.session_state.user_logged_in:
             st.session_state.user_logged_in=True
             st.session_state.username=username_input
 
-            st.experimental_rerun()
+            st.rerun()
 
         else:
 

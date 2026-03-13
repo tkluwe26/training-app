@@ -286,34 +286,34 @@ if st.session_state.current_plan:
 
     exercises=[ex.strip() for ex in day_row["Übungen"].split(",") if ex.strip()]
 
-    sets_list=[int(s) for s in day_row["Sätze"].split(",")]
-
-    completed_data=[]
-
-    for idx,ex in enumerate(exercises):
-
-    st.subheader(ex)
-
-    last_hist = history_df[
-        (history_df["User"] == st.session_state.username) &
-        (history_df["Plan"] == plan) &
-        (history_df["Trainingstag"] == day_choice) &
-        (history_df["Übung"] == ex)
-    ]
-
-    if not last_hist.empty:
-
-        last_hist = last_hist.copy()
-
-        last_hist["OneRM"] = last_hist["Gewicht"] * (
-            1 + (last_hist["Wiederholungen"] - 1) * 0.033
-        )
-
-        best_row = last_hist.loc[last_hist["OneRM"].idxmax()]
-
-        st.info(
-            f"Letztes Training: {best_row['Gewicht']} kg × {best_row['Wiederholungen']} (RIR {best_row.get('RIR','?')})"
-        )
+        sets_list=[int(s) for s in day_row["Sätze"].split(",")]
+    
+        completed_data=[]
+    
+        for idx,ex in enumerate(exercises):
+    
+        st.subheader(ex)
+    
+        last_hist = history_df[
+            (history_df["User"] == st.session_state.username) &
+            (history_df["Plan"] == plan) &
+            (history_df["Trainingstag"] == day_choice) &
+            (history_df["Übung"] == ex)
+        ]
+    
+        if not last_hist.empty:
+    
+            last_hist = last_hist.copy()
+    
+            last_hist["OneRM"] = last_hist["Gewicht"] * (
+                1 + (last_hist["Wiederholungen"] - 1) * 0.033
+            )
+    
+            best_row = last_hist.loc[last_hist["OneRM"].idxmax()]
+    
+            st.info(
+                f"Letztes Training: {best_row['Gewicht']} kg × {best_row['Wiederholungen']} (RIR {best_row.get('RIR','?')})"
+            )
 
     num_sets=sets_list[idx]
         for i in range(num_sets):

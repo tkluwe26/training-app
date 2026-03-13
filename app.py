@@ -463,9 +463,3 @@ for ex in hist_user_day["Übung"].unique():
         )
 
         st.altair_chart(chart,use_container_width=True)
-
-        ).properties(
-            title=ex
-        )
-
-        st.altair_chart(chart,use_container_width=True)

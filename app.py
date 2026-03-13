@@ -286,11 +286,11 @@ if st.session_state.current_plan:
 
     exercises=[ex.strip() for ex in day_row["Übungen"].split(",") if ex.strip()]
 
-        sets_list=[int(s) for s in day_row["Sätze"].split(",")]
+    sets_list=[int(s) for s in day_row["Sätze"].split(",")]
     
-        completed_data=[]
+    completed_data=[]
     
-        for idx,ex in enumerate(exercises):
+    for idx,ex in enumerate(exercises):
     
         st.subheader(ex)
     

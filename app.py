@@ -534,29 +534,22 @@ if st.session_state.current_plan:
                 key=f"{plan}_{ex}_{i}_rir"
             )
 
-            if not autosave_row.empty:
-
-                training_autosave_df.loc[autosave_row.index,"Gewicht"]=weight
-                training_autosave_df.loc[autosave_row.index,"Wiederholungen"]=reps
-                training_autosave_df.loc[autosave_row.index,"RIR"]=rir
-
-            else:
-
-                training_autosave_df=pd.concat([
-                    training_autosave_df,
-                    pd.DataFrame([{
-                        "User":st.session_state.username,
-                        "Plan":plan,
-                        "Trainingstag":day_choice,
-                        "Übung":ex,
-                        "Satz":i+1,
-                        "Gewicht":weight,
-                        "Wiederholungen":reps,
-                        "RIR":rir
-                    }])
-                ])
-
-            save_training_autosave()
+            # Direkt in SQLite speichern (INSERT OR REPLACE)
+            cursor.execute("""
+                INSERT OR REPLACE INTO training_autosave
+                (User, Plan, Trainingstag, Übung, Satz, Gewicht, Wiederholungen, RIR)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                st.session_state.username,
+                plan,
+                day_choice,
+                ex,
+                i+1,
+                weight,
+                reps,
+                rir
+            ))
+            conn.commit()
 
             if weight>0 and reps>0:
 

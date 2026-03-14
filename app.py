@@ -4,41 +4,95 @@ from datetime import datetime
 import os
 import altair as alt
 from uuid import uuid4
+import sqlite3
 
 st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 st.title("Progress – Training by Till 💪")
 
+
+conn = sqlite3.connect("fittrack.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    User TEXT PRIMARY KEY,
+    Password TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS plans (
+    User TEXT,
+    Planname TEXT,
+    Trainingstag TEXT,
+    Übungen TEXT,
+    Sätze TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS history (
+    User TEXT,
+    Plan TEXT,
+    Trainingstag TEXT,
+    Übung TEXT,
+    Satz INTEGER,
+    Gewicht REAL,
+    Wiederholungen INTEGER,
+    RIR INTEGER,
+    Datum TEXT,
+    SessionID TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS autosave (
+    User TEXT,
+    Planname TEXT,
+    Trainingstag TEXT,
+    Übungen TEXT,
+    Sätze TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS training_autosave (
+    User TEXT,
+    Plan TEXT,
+    Trainingstag TEXT,
+    Übung TEXT,
+    Satz INTEGER,
+    Gewicht REAL,
+    Wiederholungen INTEGER,
+    RIR INTEGER
+)
+""")
+
+conn.commit()
+
+
 # ----------------------
-# Dateien
+# SQLite Loader
 # ----------------------
 
-USERS_FILE = "users.csv"
-PLANS_FILE = "plans.csv"
-HISTORY_FILE = "history.csv"
-AUTOSAVE_FILE = "autosave.csv"
-TRAINING_AUTOSAVE_FILE = "training_autosave.csv"
+def load_table(table, columns):
 
+    try:
+        df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
 
-# ----------------------
-# CSV Loader
-# ----------------------
-
-def load_csv(file, columns):
-    if os.path.exists(file):
-        df = pd.read_csv(file)
         for col in columns:
             if col not in df.columns:
                 df[col] = ""
+
         df = df[columns]
-    else:
+
+    except:
         df = pd.DataFrame(columns=columns)
-        df.to_csv(file, index=False)
+
     return df
-
-
-users_df = load_csv(USERS_FILE, ["User","Password"])
-plans_df = load_csv(PLANS_FILE, ["User","Planname","Trainingstag","Übungen","Sätze"])
-history_df = load_csv(HISTORY_FILE, ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","RIR","Datum"])
+  
+users_df = load_table("users", ["User","Password"])
+plans_df = load_table("plans", ["User","Planname","Trainingstag","Übungen","Sätze"])
+history_df = load_table("history", ["User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","RIR","Datum","SessionID"])
 
 
 # ----------------------
@@ -46,15 +100,21 @@ history_df = load_csv(HISTORY_FILE, ["User","Plan","Trainingstag","Übung","Satz
 # ----------------------
 
 def load_autosave():
-    if os.path.exists(AUTOSAVE_FILE):
-        return pd.read_csv(AUTOSAVE_FILE)
-    else:
-        return pd.DataFrame(columns=["User","Planname","Trainingstag","Übungen","Sätze"])
+    return load_table(
+        "autosave",
+        ["User","Planname","Trainingstag","Übungen","Sätze"]
+    )
 
 autosave_df = load_autosave()
 
 def save_autosave():
-    autosave_df.to_csv(AUTOSAVE_FILE, index=False)
+
+    autosave_df.to_sql(
+        "autosave",
+        conn,
+        if_exists="replace",
+        index=False
+    )
 
 
 # ----------------------
@@ -62,18 +122,24 @@ def save_autosave():
 # ----------------------
 
 def load_training_autosave():
-    if os.path.exists(TRAINING_AUTOSAVE_FILE):
-        return pd.read_csv(TRAINING_AUTOSAVE_FILE)
-    else:
-        return pd.DataFrame(columns=[
+    return load_table(
+        "training_autosave",
+        [
             "User","Plan","Trainingstag","Übung","Satz",
             "Gewicht","Wiederholungen","RIR"
-        ])
+        ]
+    )
 
 training_autosave_df = load_training_autosave()
 
 def save_training_autosave():
-    training_autosave_df.to_csv(TRAINING_AUTOSAVE_FILE, index=False)
+
+    training_autosave_df.to_sql(
+        "training_autosave",
+        conn,
+        if_exists="replace",
+        index=False
+    )
 
 
 # ----------------------
@@ -116,7 +182,8 @@ if not st.session_state.user_logged_in:
                 "Password":password_input
             }])],ignore_index=True)
 
-            users_df.to_csv(USERS_FILE,index=False)
+            users_df.to_sql("users", conn, if_exists="replace", index=False)
+            conn.commit()
 
             st.sidebar.success("Registrierung erfolgreich")
 
@@ -186,7 +253,7 @@ if st.session_state.get("is_admin", False):
             "Password"
         ] = new_pw
 
-        users_df.to_csv(USERS_FILE, index=False)
+        users_df.to_sql("users",conn,if_exists="replace",index=False)
 
         st.success("Passwort geändert")
 
@@ -228,13 +295,12 @@ if st.session_state.get("is_admin", False):
             training_autosave_df[training_autosave_df["User"] == user_delete].index,
             inplace=True
         )
-
-        autosave_df.to_csv(AUTOSAVE_FILE, index=False)
-        training_autosave_df.to_csv(TRAINING_AUTOSAVE_FILE, index=False)
-        users_df.to_csv(USERS_FILE, index=False)
-        plans_df.to_csv(PLANS_FILE, index=False)
-        history_df.to_csv(HISTORY_FILE, index=False)
-
+        
+        autosave_df.to_sql("autosave", conn, if_exists="replace", index=False)
+        training_autosave_df.to_sql("training_autosave", conn, if_exists="replace", index=False)
+        users_df.to_sql("users", conn, if_exists="replace", index=False)
+        plans_df.to_sql("plans", conn, if_exists="replace", index=False)
+        history_df.to_sql("history", conn, if_exists="replace", index=False)
         st.success("Benutzer entfernt")
 
     # ----------------------
@@ -255,7 +321,8 @@ if st.session_state.get("is_admin", False):
 
         history_df = history_df.iloc[0:0]
 
-        history_df.to_csv(HISTORY_FILE, index=False)
+        history_df.to_sql("history", conn, if_exists="replace", index=False)
+        conn.commit()
 
         st.success("Trainingshistorie gelöscht")
 
@@ -356,7 +423,7 @@ if choice=="Neuen Plan erstellen":
                 }])
             ])
 
-        plans_df.to_csv(PLANS_FILE,index=False)
+        plans_df.to_sql("plans",conn,if_exists="replace",index=False)
 
         autosave_df.drop(
             autosave_df[
@@ -519,7 +586,8 @@ if st.session_state.current_plan:
 
             history_df=pd.concat([history_df,df_new])
 
-            history_df.to_csv(HISTORY_FILE,index=False)
+            history_df.to_sql("history", conn, if_exists="replace", index=False)
+            conn.commit()
 
             training_autosave_df.drop(
                 training_autosave_df[
@@ -657,7 +725,7 @@ with st.expander("✏️ Trainingseintrag bearbeiten"):
             history_df.loc[entry_index,"Wiederholungen"] = new_reps
             history_df.loc[entry_index,"RIR"] = new_rir
 
-            history_df.to_csv(HISTORY_FILE,index=False)
+            history_df.to_sql("history",conn,if_exists="replace",index=False)
 
             st.success("Eintrag aktualisiert")
 
@@ -697,4 +765,7 @@ if not hist_user.empty:
             f"(1RM ≈ {row['OneRM']:.1f}) "
             f"am {row['Datum'].date()}"
         )
+
+conn.commit()
+conn.close()
 

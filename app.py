@@ -122,6 +122,13 @@ if not st.session_state.user_logged_in:
 
     if st.sidebar.button("Anmelden"):
 
+        # Admin Login
+        if username_input == "admin" and password_input == "adminpasswort":
+            st.session_state.user_logged_in = True
+            st.session_state.username = "admin"
+            st.session_state.is_admin = True
+            st.rerun()
+
         row = users_df[
             (users_df["User"]==username_input) &
             (users_df["Password"]==password_input)
@@ -146,6 +153,112 @@ if not st.session_state.user_logged_in:
 # ----------------------
 
 st.header(f"Willkommen {st.session_state.username}")
+
+if st.session_state.get("is_admin", False):
+
+    st.header("Admin Panel")
+
+    # ----------------------
+    # Benutzerübersicht
+    # ----------------------
+
+    st.subheader("Alle Benutzer")
+    st.dataframe(users_df)
+
+    # ----------------------
+    # Passwort zurücksetzen
+    # ----------------------
+
+    st.subheader("Passwort zurücksetzen")
+
+    user_reset = st.selectbox(
+        "Benutzer auswählen",
+        [u for u in users_df["User"].tolist() if u != "admin"]
+    )
+
+    new_pw = st.text_input("Neues Passwort")
+
+    if st.button("Passwort ändern"):
+
+        users_df.loc[
+            users_df["User"] == user_reset,
+            "Password"
+        ] = new_pw
+
+        users_df.to_csv(USERS_FILE, index=False)
+
+        st.success("Passwort geändert")
+
+    # ----------------------
+    # Benutzer komplett löschen
+    # ----------------------
+
+    st.subheader("Benutzer löschen")
+
+    user_delete = st.selectbox(
+        "User löschen",
+        users_df["User"].tolist(),
+        key="delete_user"
+    )
+
+    if st.button("Benutzer vollständig entfernen"):
+
+        users_df.drop(
+            users_df[users_df["User"] == user_delete].index,
+            inplace=True
+        )
+
+        plans_df.drop(
+            plans_df[plans_df["User"] == user_delete].index,
+            inplace=True
+        )
+
+        history_df.drop(
+            history_df[history_df["User"] == user_delete].index,
+            inplace=True
+        )
+
+        autosave_df.drop(
+            autosave_df[autosave_df["User"] == user_delete].index,
+            inplace=True
+        )
+
+        training_autosave_df.drop(
+            training_autosave_df[training_autosave_df["User"] == user_delete].index,
+            inplace=True
+        )
+
+        autosave_df.to_csv(AUTOSAVE_FILE, index=False)
+        training_autosave_df.to_csv(TRAINING_AUTOSAVE_FILE, index=False)
+        users_df.to_csv(USERS_FILE, index=False)
+        plans_df.to_csv(PLANS_FILE, index=False)
+        history_df.to_csv(HISTORY_FILE, index=False)
+
+        st.success("Benutzer entfernt")
+
+    # ----------------------
+    # Trainingsdaten anzeigen
+    # ----------------------
+
+    st.subheader("Trainingshistorie")
+
+    st.dataframe(history_df)
+
+    # ----------------------
+    # Trainingsdaten löschen
+    # ----------------------
+
+    st.subheader("Trainingseinträge löschen")
+
+    if st.button("Komplette Trainingshistorie löschen"):
+
+        history_df = history_df.iloc[0:0]
+
+        history_df.to_csv(HISTORY_FILE, index=False)
+
+        st.success("Trainingshistorie gelöscht")
+
+    st.stop()
 
 user_plans = list(
     plans_df[
@@ -302,7 +415,7 @@ if st.session_state.current_plan:
         ]
     
         if not last_hist.empty:
-    
+
             last_hist = last_hist.copy()
     
             last_hist["OneRM"] = last_hist["Gewicht"] * (
@@ -463,3 +576,38 @@ for ex in hist_user_day["Übung"].unique():
         )
 
         st.altair_chart(chart,use_container_width=True)
+     
+# ---------------------
+# Personal Records
+# ----------------------
+
+st.subheader("🏆 Personal Records")
+
+hist_user = history_df[
+    history_df["User"] == st.session_state.username
+].copy()
+
+if not hist_user.empty:
+
+    hist_user["Datum"] = pd.to_datetime(hist_user["Datum"])
+
+    hist_user["OneRM"] = hist_user["Gewicht"] * (
+        1 + (hist_user["Wiederholungen"] - 1) * 0.033
+    )
+
+    pr_rows = (
+        hist_user
+        .sort_values("OneRM")
+        .groupby("Übung")
+        .tail(1)
+        .sort_values("OneRM", ascending=False)
+    )
+
+    for _, row in pr_rows.iterrows():
+
+        st.write(
+            f"**{row['Übung']}** — "
+            f"{row['Gewicht']} kg × {row['Wiederholungen']} "
+            f"(1RM ≈ {row['OneRM']:.1f}) "
+            f"am {row['Datum'].date()}"
+        )

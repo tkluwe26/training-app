@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import os
 import altair as alt
+from uuid import uuid4
 
 st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 st.title("Progress – Training by Till 💪")
@@ -402,6 +403,8 @@ if st.session_state.current_plan:
     sets_list=[int(s) for s in day_row["Sätze"].split(",")]
     
     completed_data=[]
+
+    session_id = str(uuid4())
     
     for idx,ex in enumerate(exercises):
     
@@ -499,7 +502,8 @@ if st.session_state.current_plan:
                     "Gewicht":weight,
                     "Wiederholungen":reps,
                     "RIR":rir,
-                    "Datum":datetime.now().strftime("%Y-%m-%d %H:%M")
+                    "Datum":datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "SessionID": session_id
                 })
 
 
@@ -576,6 +580,88 @@ for ex in hist_user_day["Übung"].unique():
         )
 
         st.altair_chart(chart,use_container_width=True)
+
+
+# ----------------------
+# Trainingshistorie (User Ansicht)
+# ----------------------
+
+with st.expander("📜 Trainingshistorie dieses Trainingstags"):
+
+    hist_day = history_df[
+        (history_df["User"] == st.session_state.username) &
+        (history_df["Plan"] == plan) &
+        (history_df["Trainingstag"] == day_choice)
+    ].copy()
+
+    if hist_day.empty:
+        st.info("Noch keine Trainingshistorie vorhanden")
+
+    else:
+
+        hist_day["Datum"] = pd.to_datetime(hist_day["Datum"])
+
+        st.dataframe(
+            hist_day.sort_values("Datum", ascending=False)
+        )
+
+
+# ----------------------
+# Trainingsbearbeitung
+# ----------------------
+
+with st.expander("✏️ Trainingseintrag bearbeiten"):
+
+    hist_edit = history_df[
+        (history_df["User"] == st.session_state.username) &
+        (history_df["Plan"] == plan) &
+        (history_df["Trainingstag"] == day_choice)
+    ]
+
+    if hist_edit.empty:
+
+        st.info("Keine Einträge zum Bearbeiten")
+
+    else:
+
+        entry_index = st.selectbox(
+            "Eintrag auswählen",
+            hist_edit.index,
+            format_func=lambda x: f"{hist_edit.loc[x,'Übung']} — "
+                                  f"{hist_edit.loc[x,'Gewicht']} kg × "
+                                  f"{hist_edit.loc[x,'Wiederholungen']} "
+                                  f"({hist_edit.loc[x,'Datum']})"
+        )
+
+        row = hist_edit.loc[entry_index]
+
+        new_weight = st.number_input(
+            "Gewicht",
+            value=float(row["Gewicht"]),
+            step=0.5
+        )
+
+        new_reps = st.number_input(
+            "Wiederholungen",
+            value=int(row["Wiederholungen"])
+        )
+
+        new_rir = st.number_input(
+            "RIR",
+            value=int(row["RIR"])
+        )
+
+        if st.button("Eintrag speichern"):
+
+            history_df.loc[entry_index,"Gewicht"] = new_weight
+            history_df.loc[entry_index,"Wiederholungen"] = new_reps
+            history_df.loc[entry_index,"RIR"] = new_rir
+
+            history_df.to_csv(HISTORY_FILE,index=False)
+
+            st.success("Eintrag aktualisiert")
+
+            st.rerun()
      
 # ---------------------
 # Personal Records
@@ -611,3 +697,45 @@ if not hist_user.empty:
             f"(1RM ≈ {row['OneRM']:.1f}) "
             f"am {row['Datum'].date()}"
         )
+
+
+st.subheader("📋 Trainingshistorie für diesen Tag")
+
+hist_day = history_df[
+    (history_df["User"] == st.session_state.username) &
+    (history_df["Plan"] == plan) &
+    (history_df["Trainingstag"] == day_choice)
+]
+
+if not hist_day.empty:
+
+    for session_id, session_group in hist_day.groupby("SessionID"):
+        session_date = session_group["Datum"].iloc[0]
+        with st.expander(f"Session {session_date}"):
+            for idx, row in session_group.iterrows():
+                cols = st.columns([2,1,1,1,1])
+                cols[0].write(f"{row['Übung']} (Satz {row['Satz']})")
+                weight = cols[1].number_input(
+                    "Gewicht",
+                    value=float(row["Gewicht"]),
+                    step=0.5,
+                    key=f"{row['SessionID']}_{row['Übung']}_{row['Satz']}_w"
+                )
+                reps = cols[2].number_input(
+                    "Reps",
+                    value=int(row["Wiederholungen"]),
+                    key=f"{row['SessionID']}_{row['Übung']}_{row['Satz']}_r"
+                )
+                rir = cols[3].number_input(
+                    "RIR",
+                    value=int(row["RIR"]),
+                    key=f"{row['SessionID']}_{row['Übung']}_{row['Satz']}_rir"
+                )
+                # Update in history_df direkt
+                history_df.loc[idx, "Gewicht"] = weight
+                history_df.loc[idx, "Wiederholungen"] = reps
+                history_df.loc[idx, "RIR"] = rir
+
+            if st.button(f"Session {session_date} speichern", key=f"save_{session_id}"):
+                history_df.to_csv(HISTORY_FILE, index=False)
+                st.success("Session aktualisiert!")

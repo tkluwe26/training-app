@@ -6,23 +6,11 @@ import altair as alt
 from uuid import uuid4
 from sqlalchemy import create_engine
 
-import psycopg2
-
-try:
-    conn = psycopg2.connect(
-        "postgresql://postgres:ftitbwTegm%402026@db.eunvbvfsoomwwqnzrhon.supabase.co:5432/postgres",
-        sslmode="require"
-    )
-    print("Verbindung erfolgreich!")
-    conn.close()
-except Exception as e:
-    print("Fehler bei der Verbindung:", e)
-
 st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 st.title("Progress – Training by Till 💪")
 
 # URL aus Secrets
-db_url = st.secrets["DB_URL"]
+db_url = "postgresql://postgres:ftitbwTegm%402026@db.eunvbvfsoomwwqnzrhon.supabase.co:5432/postgres"
 
 engine = create_engine(db_url, connect_args={"sslmode":"require"})
 conn = engine.connect()

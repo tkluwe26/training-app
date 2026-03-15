@@ -9,8 +9,16 @@ from sqlalchemy import create_engine
 st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 st.title("Progress – Training by Till 💪")
 
+# URL aus Secrets
+db_url = st.secrets["DB_URL"]
 
-engine = create_engine(st.secrets["DB_URL"])
+# Engine mit SSL-Verbindung erstellen
+engine = create_engine(
+    db_url,
+    connect_args={
+        "sslmode": "require"  # zwingt SSL
+    }
+)
 conn = engine.connect()
 conn.execute("""
 CREATE TABLE IF NOT EXISTS users (

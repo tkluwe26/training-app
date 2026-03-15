@@ -4,69 +4,68 @@ from datetime import datetime
 import os
 import altair as alt
 from uuid import uuid4
-import sqlite3
+from sqlalchemy import create_engine
 
 st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 st.title("Progress – Training by Till 💪")
 
 
-conn = sqlite3.connect("fittrack.db", check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute("""
+engine = create_engine(st.secrets["DB_URL"])
+conn = engine.connect()
+conn.execute("""
 CREATE TABLE IF NOT EXISTS users (
-    User TEXT PRIMARY KEY,
-    Password TEXT
+    "User" TEXT PRIMARY KEY,
+    "Password" TEXT
 )
 """)
 
-cursor.execute("""
+conn.execute("""
 CREATE TABLE IF NOT EXISTS plans (
-    User TEXT,
-    Planname TEXT,
-    Trainingstag TEXT,
-    Übungen TEXT,
-    Sätze TEXT
+    "User" TEXT,
+    "Planname" TEXT,
+    "Trainingstag" TEXT,
+    "Übungen" TEXT,
+    "Sätze" TEXT
 )
 """)
 
-cursor.execute("""
+conn.execute("""
 CREATE TABLE IF NOT EXISTS history (
-    User TEXT,
-    Plan TEXT,
-    Trainingstag TEXT,
-    Übung TEXT,
-    Satz INTEGER,
-    Gewicht REAL,
-    Wiederholungen INTEGER,
-    RIR INTEGER,
-    Datum TEXT,
-    SessionID TEXT
+    "User" TEXT,
+    "Plan" TEXT,
+    "Trainingstag" TEXT,
+    "Übung" TEXT,
+    "Satz" INTEGER,
+    "Gewicht" REAL,
+    "Wiederholungen" INTEGER,
+    "RIR" INTEGER,
+    "Datum" TEXT,
+    "SessionID" TEXT
 )
 """)
 
-cursor.execute("""
+conn.execute("""
 CREATE TABLE IF NOT EXISTS autosave (
-    User TEXT,
-    Planname TEXT,
-    Trainingstag TEXT,
-    Übungen TEXT,
-    Sätze TEXT
+    "User" TEXT,
+    "Planname" TEXT,
+    "Trainingstag" TEXT,
+    "Übungen" TEXT,
+    "Sätze" TEXT
 )
 """)
 
-cursor.execute("""
+conn.execute("""
 CREATE TABLE IF NOT EXISTS training_autosave (
-    User TEXT,
-    Plan TEXT,
-    Trainingstag TEXT,
-    Übung TEXT,
-    Satz INTEGER,
-    Gewicht REAL,
-    Wiederholungen INTEGER,
-    RIR INTEGER
+    "User" TEXT,
+    "Plan" TEXT,
+    "Trainingstag" TEXT,
+    "Übung" TEXT,
+    "Satz" INTEGER,
+    "Gewicht" REAL,
+    "Wiederholungen" INTEGER,
+    "RIR" INTEGER
 )
 """)
-
 conn.commit()
 
 
@@ -182,7 +181,7 @@ if not st.session_state.user_logged_in:
                 "Password":password_input
             }])],ignore_index=True)
 
-            users_df.to_sql("users", conn, if_exists="replace", index=False)
+            users_df.to_sql("users", conn, if_exists="append", index=False)
             conn.commit()
 
             st.sidebar.success("Registrierung erfolgreich")
@@ -535,21 +534,30 @@ if st.session_state.current_plan:
             )
 
             # Direkt in SQLite speichern (INSERT OR REPLACE)
-            cursor.execute("""
-                INSERT OR REPLACE INTO training_autosave
-                (User, Plan, Trainingstag, Übung, Satz, Gewicht, Wiederholungen, RIR)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                st.session_state.username,
-                plan,
-                day_choice,
-                ex,
-                i+1,
-                weight,
-                reps,
-                rir
-            ))
+            conn.execute("""
+            INSERT INTO training_autosave
+            ("User","Plan","Trainingstag","Übung","Satz","Gewicht","Wiederholungen","RIR")
+            VALUES (:user,:plan,:day,:ex,:set,:weight,:reps,:rir)
+            ON CONFLICT ("User","Plan","Trainingstag","Übung","Satz")
+            DO UPDATE SET
+            "Gewicht" = EXCLUDED."Gewicht",
+            "Wiederholungen" = EXCLUDED."Wiederholungen",
+            "RIR" = EXCLUDED."RIR"
+            """,
+            {
+            "user": st.session_state.username,
+            "plan": plan,
+            "day": day_choice,
+            "ex": ex,
+            "set": i+1,
+            "weight": weight,
+            "reps": reps,
+            "rir": rir
+            })
             conn.commit()
+
+            # ✅ DataFrame aktualisieren
+            training_autosave_df = pd.read_sql("SELECT * FROM training_autosave", conn)
 
             if weight>0 and reps>0:
 
@@ -760,5 +768,3 @@ if not hist_user.empty:
         )
 
 conn.commit()
-conn.close()
-

@@ -10,11 +10,11 @@ st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 st.title("Progress – Training by Till 💪")
 
 # URL aus Secrets
-db_url = "postgresql://postgres:ftitbwTegm%402026@db.eunvbvfsoomwwqnzrhon.supabase.co:5432/postgres"
+db_url = "postgresql://postgres:OsXM4Udvg7nDJe5H@db.eunvbvfsoomwwqnzrhon.supabase.co:5432/postgres"
 
 engine = create_engine(
     db_url,
-    connect_args={"sslmode":"require", "client_encoding":"utf8"}
+    connect_args={"sslmode": "require"}
 )
 conn = engine.connect()
 conn.execute("""

@@ -10,13 +10,16 @@ st.set_page_config(page_title="FitTrack", page_icon="💪", layout="wide")
 st.title("Progress – Training by Till 💪")
 
 # URL aus Secrets
-db_url = "postgresql://postgres:OsXM4Udvg7nDJe5H@db.eunvbvfsoomwwqnzrhon.supabase.co:5432/postgres"
+db_url = st.secrets["DB_URL"]
 
-engine = create_engine(
-    db_url,
-    connect_args={"sslmode": "require"}
-)
-conn = engine.connect()
+engine = create_engine(db_url, connect_args={"sslmode":"require"})
+
+try:
+    conn = engine.connect()
+    st.success("Verbindung zur Datenbank erfolgreich!")
+except Exception as e:
+    st.error(f"Fehler bei der Verbindung: {e}")
+    
 conn.execute("""
 CREATE TABLE IF NOT EXISTS users (
     "User" TEXT PRIMARY KEY,
